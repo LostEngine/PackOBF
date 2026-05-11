@@ -11,6 +11,7 @@ pub mod utils;
 use crate::cache::Cache;
 use crate::minecraft::builtin_files::AtlasType;
 use crate::optimized_zip_writer::OptimizedZipWriter;
+use crate::options::Options;
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
@@ -27,24 +28,59 @@ use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::Mapping;
 use crate::resource_pack::resource_pack::ResourcePack;
 use crate::LogLevel::{Error, Info};
-use rayon::prelude::*;
 use std::io::{Cursor, Read};
 use std::str::FromStr;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use tokio::sync::watch;
+use serde::{Deserialize, Serialize};
+use wasm_bindgen::prelude::wasm_bindgen;
+use wasm_bindgen::JsValue;
 use zip::ZipArchive;
 
-pub fn process_zip(
-    input_bytes: Vec<u8>,
-    options: &options::Options,
-    progress: watch::Sender<Progress>,
-    logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
-    cache_file: &Option<String>,
-) -> zip::result::ZipResult<Vec<u8>> {
-    let _ = progress.send(Progress::Idle);
+#[wasm_bindgen(start)]
+pub fn init() {
+    console_error_panic_hook::set_once();
+}
 
-    let progress_clone = progress.clone();
+#[wasm_bindgen]
+pub fn process_zip_wasm(
+    input_bytes: Vec<u8>,
+    options: JsValue,
+    progress_cb: js_sys::Function,
+    log_cb: js_sys::Function,
+) -> Result<Vec<u8>, JsValue> {
+    let options: Options = serde_wasm_bindgen::from_value(options)?;
+
+    process_zip(
+        input_bytes,
+        &options,
+        &|p| {
+            match serde_wasm_bindgen::to_value(&p) {
+                Ok(v) => { let _ = progress_cb.call1(&JsValue::NULL, &v); }
+                Err(_) => {}
+            }
+        },
+        &|log| {
+            match serde_wasm_bindgen::to_value(&log) {
+                Ok(v) => { let _ = log_cb.call1(&JsValue::NULL, &v); }
+                Err(_) => {}
+            }
+        },
+        &None,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))
+}
+
+pub fn process_zip<F, L>(
+    input_bytes: Vec<u8>,
+    options: &Options,
+    progress: &F,
+    logger: &L,
+    cache_file: &Option<String>,
+) -> zip::result::ZipResult<Vec<u8>>
+where
+    F: Fn(Progress),
+    L: Fn(LogMessage),
+{
+    let _ = progress(Progress::Idle);
+
     let reader = Cursor::new(&input_bytes);
     let mut archive = ZipArchive::new(reader)?;
 
@@ -52,7 +88,7 @@ pub fn process_zip(
     let mut entries = Vec::with_capacity(len);
 
     for i in 0..len {
-        let _ = progress_clone.send(Progress::ReadingZip {
+        let _ = progress(Progress::ReadingZip {
             current: i,
             total: len,
         });
@@ -69,12 +105,9 @@ pub fn process_zip(
         entries.push((name, content));
     }
 
-    let pack = Arc::new(ResourcePack::default());
-
-    let progress_clone = progress.clone();
-    let pack_clone = Arc::clone(&pack);
-    entries.par_iter_mut().for_each(move |(name, content)| {
-        let _ = progress_clone.send(Progress::Parsing {
+    let pack = ResourcePack::default();
+    for (name, content) in &entries {
+        let _ = progress(Progress::Parsing {
             current: name.to_string(),
         });
         if name.ends_with(".json") {
@@ -86,61 +119,61 @@ pub fn process_zip(
                 || asset_type == Some("atlases")
             {
                 let (overlay, identifier) = parse_path(&name);
-                let json_str = String::from_utf8(content.to_owned()).unwrap();
+                let json_str = String::from_utf8(content.to_owned())?;
                 match asset_type.unwrap() {
                     "models" => {
                         match Model::from_json(overlay, identifier, &json_str) {
                             Ok(value) => {
-                                pack_clone.model(value);
+                                pack.model(value);
                             }
                             Err(e) => {
-                                let _ = logger.send(LogMessage {
+                                logger(LogMessage {
                                     level: Error,
                                     message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                                 });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                             }
                         }
                     }
                     "blockstates" => {
                         match Blockstate::from_json(overlay, identifier, &json_str) {
                             Ok(value) => {
-                                pack_clone.blockstate(value);
+                                pack.blockstate(value);
                             }
                             Err(e) => {
-                                let _ = logger.send(LogMessage {
+                                logger(LogMessage {
                                     level: Error,
                                     message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                                 });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                             }
                         }
                     }
                     "items" => {
                         match Item::from_json(overlay, identifier, &json_str) {
                             Ok(value) => {
-                                pack_clone.item(value);
+                                pack.item(value);
                             }
                             Err(e) => {
-                                let _ = logger.send(LogMessage {
+                                logger(LogMessage {
                                     level: Error,
                                     message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                                 });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                             }
                         }
                     }
                     "font" => {
                         match Font::from_json(overlay, identifier, &json_str) {
                             Ok(value) => {
-                                pack_clone.font(value);
+                                pack.font(value);
                             }
                             Err(e) => {
-                                let _ = logger.send(LogMessage {
+                                logger(LogMessage {
                                     level: Error,
                                     message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                                 });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                             }
                         }
                     }
@@ -149,19 +182,19 @@ pub fn process_zip(
                             Ok(atlas_type) => {
                                 match Atlas::from_json(overlay, atlas_type, &json_str) {
                                     Ok(value) => {
-                                        pack_clone.atlas(value);
+                                        pack.atlas(value);
                                     }
                                     Err(e) => {
-                                        let _ = logger.send(LogMessage {
+                                        logger(LogMessage {
                                             level: Error,
                                             message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                                         });
-                                        pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                        pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                                     }
                                 }
                             }
                             Err(_) => {
-                                let _ = logger.send(
+                                logger(
                                     LogMessage {
                                         level: Error,
                                         message: format!(
@@ -169,7 +202,7 @@ pub fn process_zip(
                                             name,
                                         ),
                                     });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                             }
                         }
                     }
@@ -178,30 +211,30 @@ pub fn process_zip(
             } else {
                 if name.ends_with("/sounds.json") {
                     let (overlay, identifier) = parse_path(&name);
-                    let json_str = String::from_utf8(content.to_owned()).unwrap();
+                    let json_str = String::from_utf8(content.to_owned())?;
                     match SoundDefinitions::from_json(overlay, identifier.namespace, &json_str) {
                         Ok(value) => {
-                            pack_clone.sound_definitions(value);
+                            pack.sound_definitions(value);
                         }
                         Err(e) => {
-                            let _ = logger.send(LogMessage {
+                            logger(LogMessage {
                                 level: Error,
                                 message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                             });
-                            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                            pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                         }
                     }
                 } else {
                     match serde_json::from_slice(&content) {
                         Ok(value) => {
-                            pack_clone.json_file(Json::new(name.to_owned(), value));
+                            pack.json_file(Json::new(name.to_owned(), value));
                         }
                         Err(e) => {
-                            let _ = logger.send(LogMessage {
+                            logger(LogMessage {
                                 level: Error,
                                 message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                             });
-                            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                            pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                         }
                     }
                 }
@@ -209,31 +242,31 @@ pub fn process_zip(
         } else if name.ends_with(".mcmeta") {
             match serde_json::from_slice(&content) {
                 Ok(value) => {
-                    pack_clone.json_file(Json::new(name.to_owned(), value));
+                    pack.json_file(Json::new(name.to_owned(), value));
                 }
                 Err(e) => {
-                    let _ = logger.send(LogMessage {
+                    logger(LogMessage {
                         level: Error,
                         message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
                     });
-                    pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+                    pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
                 }
             }
         } else if name.ends_with(".png") && get_type(&name) == Some("textures") {
             let (overlay, identifier) = parse_path(&name);
-            pack_clone.texture(Texture::new(overlay, identifier, content.to_owned()));
+            pack.texture(Texture::new(overlay, identifier, content.to_owned()));
         } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
-            pack_clone.shader(Shader::new(
+            pack.shader(Shader::new(
                 name.to_owned(),
-                String::from_utf8(content.to_owned()).unwrap(),
+                String::from_utf8(content.to_owned())?,
             ));
         } else if name.ends_with(".ogg") && get_type(&name) == Some("sounds") {
             let (overlay, identifier) = parse_path(&name);
-            pack_clone.sound(Sound::new(overlay, identifier, content.to_owned()));
+            pack.sound(Sound::new(overlay, identifier, content.to_owned()));
         } else {
-            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+            pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
         }
-    });
+    };
 
     let mut mapping = Mapping::default();
     if options.rename_files {
@@ -313,21 +346,21 @@ pub fn process_zip(
     let total = items.len();
     let mut output = Cursor::new(Vec::new());
     let writer = OptimizedZipWriter::new(&mut output);
-    let counter = AtomicUsize::new(0);
+    let mut counter = 0;
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
-        writer.add_file("assets\0", Vec::new().as_slice(), &options, &None)?;
+        writer.add_file("assets\0", Vec::new().as_slice(), options, &None)?;
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
     let cache = if let Some(cache) = cache_file {
-        let _ = logger.send(LogMessage {
+        logger(LogMessage {
             level: Info,
             message: format!("Loading cache from {}", cache),
         });
         let cache = Cache::load_from_file(cache)?;
-        let _ = logger.send(LogMessage {
+        logger(LogMessage {
             level: Info,
             message: format!("Cache loaded: {} items", cache.items.len()),
         });
@@ -336,12 +369,13 @@ pub fn process_zip(
         None
     };
 
-    items.par_iter_mut().for_each(|(name, item)| {
-        let _ = progress.send(Progress::Building {
+    for (name, item) in items.iter_mut() {
+        let _ = progress(Progress::Building {
             current: name.to_string(),
-            index: counter.fetch_add(1, Ordering::Relaxed),
+            index: counter,
             total,
         });
+        counter += 1;
         if !name.starts_with("assets/") {
             let mut parts = name.split('/');
             let overlay = parts.next().unwrap().to_string();
@@ -351,51 +385,51 @@ pub fn process_zip(
             }
         }
         match item {
-            ResourcePackItem::Texture(t) => t.optimize(&options, &logger, &cache),
-            ResourcePackItem::Shader(s) => s.optimize(&options, &logger, &cache),
-            ResourcePackItem::Sound(s) => s.optimize(&logger, &cache),
+            ResourcePackItem::Texture(t) => t.optimize(options, logger, &cache),
+            ResourcePackItem::Shader(s) => s.optimize(options, logger, &cache),
+            ResourcePackItem::Sound(s) => s.optimize(logger, &cache),
             _ => {}
         }
         match item {
             ResourcePackItem::Texture(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
+                writer.add_file(name.as_str(), o.bytes.as_slice(), options, &cache)
             }
             ResourcePackItem::Shader(o) => {
-                writer.add_file(name.as_str(), o.content.as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.content.as_bytes(), options, &cache)
             }
             ResourcePackItem::Json(o) => writer.add_file(
                 name.as_str(),
                 o.content.to_string().as_bytes(),
-                &options,
+                options,
                 &cache,
             ),
             ResourcePackItem::Model(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
             ResourcePackItem::Unknown(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
+                writer.add_file(name.as_str(), o.bytes.as_slice(), options, &cache)
             }
             ResourcePackItem::BlockStateDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
             ResourcePackItem::FontDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
             ResourcePackItem::ItemDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
             ResourcePackItem::Sound(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
+                writer.add_file(name.as_str(), o.bytes.as_slice(), options, &cache)
             }
             ResourcePackItem::SoundDefinitions(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
             ResourcePackItem::Atlas(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
+                writer.add_file(name.as_str(), o.to_string().as_bytes(), options, &cache)
             }
         }
         .expect("Failed to write file to zip archive");
-    });
+    };
 
     writer.finish()?;
 
@@ -403,11 +437,11 @@ pub fn process_zip(
         let _ = cache.save_to_file(cache_file.clone().unwrap().as_str());
     }
 
-    let _ = progress.send(Progress::Done);
+    let _ = progress(Progress::Done);
     Ok(output.into_inner())
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Progress {
     Idle,
     ReadingZip {
@@ -475,15 +509,20 @@ fn parse_path(path: &str) -> (String, Identifier) {
     (overlay, Identifier::new(namespace, path.to_string()))
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LogMessage {
     pub level: LogLevel,
     pub message: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LogLevel {
     Info = 0,
     Warning = 1,
     Error = 2,
+}
+
+pub struct Reporter {
+    pub progress_cb: js_sys::Function,
+    pub log_cb: js_sys::Function,
 }

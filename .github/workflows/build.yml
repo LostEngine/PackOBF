@@ -4,33 +4,17 @@ on:
   push:
     paths-ignore:
       - 'README.md'
-    branches: [ "main" ]
+    branches: [ "webassembly" ]
   pull_request:
     paths-ignore:
       - 'README.md'
-    branches: [ "main" ]
+    branches: [ "webassembly" ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            cli: packobf_cli.exe
-            java-lib: rust.dll
-          - os: macos-latest
-            cli: packobf_cli
-            java-lib: librust.dylib
-          - os: ubuntu-latest
-            cli: packobf_cli
-            java-lib: librust.so
+    name: Build Web Assembly
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -42,73 +26,21 @@ jobs:
         uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-about
+          tool: cargo-about,wasm-pack
       - name: Build
-        run: cargo build --release
+        run: |
+          cd packobf
+          wasm-pack build -t web
       - name: Prepare License
         run: cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
       - name: Prepare CLI Executable
         # Always make sure files that are published contain the license files
         run: |
-          mkdir -p dist
-          cp target/release/${{ matrix.cli }} dist/
+          mkdir dist
+          cp packobf/pkg/* dist/
           cp LICENSE.md dist/
-      - name: Upload CLI Executable
+      - name: Upload Package
         uses: actions/upload-artifact@v4
         with:
-          name: cli-${{ matrix.os }}
+          name: JavaScript Package
           path: dist/*
-      - name: Prepare Java Native Library
-        run: |
-          rm -rf dist && mkdir -p dist
-          cp target/release/${{ matrix.java-lib }} dist/
-          cp LICENSE.md dist/
-      - name: Upload Java Native Library
-        uses: actions/upload-artifact@v4
-        with:
-          name: java-lib-${{ matrix.os }}
-          path: dist/*
-  buildJava:
-    name: Build Java Library
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: graalvm/setup-graalvm@v1
-        with:
-          java-version: '21'
-          distribution: 'graalvm'
-          cache: 'gradle'
-      - name: Download Linux native
-        uses: actions/download-artifact@v4
-        with:
-          name: java-lib-ubuntu-latest
-          path: artifacts/native/linux
-      - name: Download MacOS native
-        uses: actions/download-artifact@v4
-        with:
-          name: java-lib-macos-latest
-          path: artifacts/native/macos
-      - name: Download Windows native
-        uses: actions/download-artifact@v4
-        with:
-          name: java-lib-windows-latest
-          path: artifacts/native/windows
-      - name: Copy native libraries
-        run: |
-          mkdir -p java/build/external-natives
-          cp artifacts/native/linux/librust.so java/build/external-natives/
-          cp artifacts/native/macos/librust.dylib java/build/external-natives/
-          cp artifacts/native/windows/rust.dll java/build/external-natives/
-          cp artifacts/native/linux/LICENSE.md java/build/external-natives/
-      - name: Build
-        run: |
-          cd java
-          ./gradlew build
-      - name: Upload jar
-        uses: actions/upload-artifact@v4
-        with:
-          name: java-package
-          path: java/build/libs/*.jar

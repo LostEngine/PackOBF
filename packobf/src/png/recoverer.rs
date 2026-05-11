@@ -1,47 +1,41 @@
-use image::codecs::png::{CompressionType, FilterType, PngEncoder};
-use image::{ExtendedColorType, ImageEncoder};
+use std::io::Cursor;
+use zune_png::zune_core::options::DecoderOptions;
+use zune_png::PngDecoder;
 
 pub fn recover_png(input: &[u8]) -> Result<Vec<u8>, String> {
-    unsafe {
-        let mut width: i32 = 0;
-        let mut height: i32 = 0;
-        let mut channels: i32 = 0;
+    let cursor = Cursor::new(input);
 
-        let pixel_ptr = stb_image::stb_image::stbi_load_from_memory(
-            input.as_ptr(),
-            input.len() as i32,
-            &mut width,
-            &mut height,
-            &mut channels,
-            0,
-        );
+    let options = DecoderOptions::default()
+        .png_set_confirm_crc(false)
+        .set_strict_mode(false);
 
-        if pixel_ptr.is_null() {
-            return Err("stb_image could not recover any pixels from this file.".to_string());
-        }
+    let mut decoder = PngDecoder::new_with_options(cursor, options);
 
-        let byte_count = (width * height * channels) as usize;
-        let raw_pixels = std::slice::from_raw_parts(pixel_ptr, byte_count).to_vec();
+    let pixels = decoder
+        .decode()
+        .map_err(|e| format!("Zune-png failed to recover pixels: {:?}", e))?;
 
-        stb_image::stb_image::stbi_image_free(pixel_ptr as *mut _);
+    let info = decoder.info().ok_or("Could not get image info")?;
+    let (width, height) = (info.width as u32, info.height as u32);
 
-        rebuild_png(raw_pixels, width as u32, height as u32, channels)
-    }
-}
+    let colorspace = decoder.colorspace().ok_or("Unknown colorspace")?;
 
-fn rebuild_png(pixels: Vec<u8>, w: u32, h: u32, channels: i32) -> Result<Vec<u8>, String> {
+    use image::codecs::png::PngEncoder;
+    use image::{ColorType, ImageEncoder};
+
     let mut output = Vec::new();
-    let color_type = match channels {
-        1 => ExtendedColorType::L8,
-        2 => ExtendedColorType::La8,
-        3 => ExtendedColorType::Rgb8,
-        4 => ExtendedColorType::Rgba8,
-        _ => return Err("Unsupported channel count".to_string()),
+    let encoder = PngEncoder::new(&mut output);
+
+    let color_type = match colorspace {
+        zune_png::zune_core::colorspace::ColorSpace::RGB => ColorType::Rgb8,
+        zune_png::zune_core::colorspace::ColorSpace::RGBA => ColorType::Rgba8,
+        zune_png::zune_core::colorspace::ColorSpace::Luma => ColorType::L8,
+        zune_png::zune_core::colorspace::ColorSpace::LumaA => ColorType::La8,
+        _ => return Err(format!("Unsupported colorspace: {:?}", colorspace)),
     };
 
-    let encoder = PngEncoder::new_with_quality(&mut output, CompressionType::Uncompressed, FilterType::Adaptive);
     encoder
-        .write_image(&pixels, w, h, color_type)
+        .write_image(&pixels.u8().ok_or("Could not get pixel bytes")?, width, height, color_type.into())
         .map_err(|e| e.to_string())?;
 
     Ok(output)

@@ -7,7 +7,6 @@ use crate::{options, LogMessage};
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, StripChunks};
 use sha2::{Digest, Sha256};
-use std::time::Duration;
 
 // textures are referenced in `models`, `items` and `font`
 #[derive(Clone, Debug)]
@@ -30,12 +29,10 @@ impl Texture {
         }
     }
 
-    pub fn optimize(
-        &mut self,
-        options: &Options,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
-        cache: &Option<Cache>,
-    ) {
+    pub fn optimize<L>(&mut self, options: &Options, logger: &L, cache: &Option<Cache>)
+    where
+        L: Fn(LogMessage),
+    {
         self.bytes = Self::cache_or_optimize(&self.bytes, options, logger, cache, &self.path());
         if options.corrupt_png_files {
             match crc::modify_png_crcs(&self.bytes) {
@@ -43,7 +40,7 @@ impl Texture {
                     self.bytes = bytes;
                 }
                 Err(e) => {
-                    let _ = logger.send(LogMessage {
+                    logger(LogMessage {
                         level: Warning,
                         message: format!("Could not corrupt image '{}'. Error: {}", self.path(), e),
                     });
@@ -52,13 +49,16 @@ impl Texture {
         }
     }
 
-    fn cache_or_optimize(
+    fn cache_or_optimize<L>(
         bytes: &[u8],
         options: &Options,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
+        logger: &L,
         cache: &Option<Cache>,
         path: &str,
-    ) -> Vec<u8> {
+    ) -> Vec<u8>
+    where
+        L: Fn(LogMessage),
+    {
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
             sha256.update(bytes);
@@ -71,7 +71,7 @@ impl Texture {
                 })
                 .flatten()
             {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Info,
                     message: format!("Image '{}' was loaded from cache.", path),
                 });
@@ -96,7 +96,7 @@ impl Texture {
                 value
             }
             Err(e) => {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Info,
                     message: format!(
                         "Could not optimize image '{}'. Trying to recover it. Error: {}",
@@ -105,7 +105,7 @@ impl Texture {
                 });
                 match recoverer::recover_png(bytes) {
                     Ok(value) => {
-                        let _ = logger.send(LogMessage {
+                        logger(LogMessage {
                             level: Info,
                             message: format!("Image '{}' was recovered successfully.", path),
                         });
@@ -122,7 +122,7 @@ impl Texture {
                                 value
                             }
                             Err(e) => {
-                                let _ = logger.send(LogMessage {
+                                logger(LogMessage {
                                     level: Warning,
                                     message: format!(
                                         "Could not optimize image '{}'. Skipping optimization. Error: {}",
@@ -134,7 +134,7 @@ impl Texture {
                         }
                     }
                     Err(e) => {
-                        let _ = logger.send(LogMessage {
+                        logger(LogMessage {
                             level: Warning,
                             message: format!(
                                 "Could not recover image '{}'. Skipping optimization. Error: {}",
@@ -194,7 +194,7 @@ static DEFAULT_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Libdeflater { compression: 6 }, // 6: default compression level
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 
@@ -227,7 +227,7 @@ static NORMAL_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Libdeflater { compression: 12 }, // 12: max compression level for libdeflater
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 
@@ -260,7 +260,7 @@ static MAX_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Zopfli(options::ZOPFLI_OPTIONS.to_owned()), // zopfli: best compression
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 //</editor-fold>

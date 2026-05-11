@@ -19,12 +19,14 @@ impl Shader {
         }
     }
 
-    pub fn optimize(
+    pub fn optimize<L>(
         &mut self,
         options: &crate::options::Options,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
+        logger: &L,
         cache: &Option<Cache>,
-    ) {
+    ) where
+        L: Fn(LogMessage),
+    {
         if options.shader_compression == ShaderCompression::None {
             return;
         }
@@ -40,7 +42,7 @@ impl Shader {
                 })
                 .flatten()
             {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Info,
                     message: format!("Shader '{}' was loaded from cache.", self.path),
                 });
@@ -66,7 +68,7 @@ impl Shader {
                 }
             }
             Err(e) => {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Warning,
                     message: format!(
                         "Could not minify shader '{}'. Skipping optimization. Error: {}",

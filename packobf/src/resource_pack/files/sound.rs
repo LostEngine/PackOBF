@@ -29,18 +29,17 @@ impl Sound {
         }
     }
 
-    pub fn optimize(
-        &mut self,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
-        cache: &Option<Cache>,
-    ) {
+    pub fn optimize<L>(&mut self, logger: &L, cache: &Option<Cache>)
+    where
+        L: Fn(LogMessage),
+    {
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
             sha256.update(self.bytes.as_slice());
             let hash: [u8; 32] = sha256.finalize().into();
 
             if let Some(bytes) = cache.with_item(&hash, ItemType::Sound, |it| it.data.clone()) {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Info,
                     message: format!("Sound '{}' was loaded from cache.", self.path()),
                 });
@@ -76,7 +75,7 @@ impl Sound {
                 self.bytes = bytes;
             }
             Err(e) => {
-                let _ = logger.send(LogMessage {
+                logger(LogMessage {
                     level: Warning,
                     message: format!(
                         "Could not optimize sound '{}'. Skipping optimization. Error: {}",

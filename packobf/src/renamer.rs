@@ -11,13 +11,11 @@ use crate::resource_pack::resource_pack::ResourcePack;
 use crate::{LogLevel, LogMessage};
 use serde_json::json;
 use std::collections::HashMap;
-use tokio::sync::mpsc::UnboundedSender;
 
-pub fn rename_files(
-    logger: &UnboundedSender<LogMessage>,
-    pack: &ResourcePack,
-    mapping: &mut Mapping,
-) {
+pub fn rename_files<L>(logger: L, pack: &ResourcePack, mapping: &mut Mapping)
+where
+    L: FnMut(LogMessage),
+{
     rename_overlays(pack, mapping);
     rename_models(pack, mapping);
     rename_textures(logger, &pack, mapping);
@@ -80,11 +78,10 @@ fn rename_sounds(pack: &ResourcePack, mapping: &mut Mapping) {
     }
 }
 
-fn rename_textures(
-    logger: &UnboundedSender<LogMessage>,
-    pack: &&ResourcePack,
-    mapping: &mut Mapping,
-) {
+fn rename_textures<L>(mut logger: L, pack: &&ResourcePack, mapping: &mut Mapping)
+where
+    L: FnMut(LogMessage),
+{
     let mut per_folder_count: HashMap<String, usize> = HashMap::new();
     let font_textures = get_font_textures(pack);
     for x in pack.textures.clone().iter() {
@@ -144,7 +141,7 @@ fn rename_textures(
             }
             let prefix = if in_blocks {
                 if in_items {
-                    let _ = logger.send(LogMessage {
+                    logger(LogMessage {
                         level: LogLevel::Warning,
                         message: format!(
                             "'{}' is both in blocks and items atlas. Using blocks atlas.",

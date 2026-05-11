@@ -1,23 +1,17 @@
 use once_cell::sync::Lazy;
 use std::num::NonZeroU64;
-use clap::{Parser, ValueEnum};
+use serde::Deserialize;
 
-#[derive(Parser, Clone, Debug)]
-#[group(id = "options")]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Options {
-    #[arg(short, long, value_enum, default_value_t = Compression::Normal)]
     pub compression: Compression,
-    #[arg(long, value_enum, default_value_t = ShaderCompression::Minify)]
     pub shader_compression: ShaderCompression,
-    #[arg(long)]
     pub rename_files: bool,
-    #[arg(long)]
     pub block_unzipping: bool,
-    #[arg(long)]
     pub corrupt_png_files: bool,
 }
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(Clone, Debug)]
 pub enum Preset {
     Simplest,
     Normal,
@@ -65,7 +59,7 @@ impl Options {
 }
 
 #[repr(u8)]
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub enum Compression {
     Simplest = 0,
     Normal = 1,
@@ -73,8 +67,7 @@ pub enum Compression {
 }
 
 #[repr(u8)]
-#[derive(ValueEnum, Clone, Debug)]
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize)]
 pub enum ShaderCompression {
     None = 0,
     Minify = 1,
