@@ -1,0 +1,17 @@
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "Unicode-3.0",
+    "ISC",
+    "MPL-2.0",
+    "BSD-3-Clause",
+    "BSD-2-Clause",
+    "OpenSSL",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+    "bzip2-1.0.6",
+    "NCSA",
+    "CC0-1.0",
+    "MIT-0",
+]
+#cargo about generate about.hbs > THIRD_PARTY_LICENSES.md

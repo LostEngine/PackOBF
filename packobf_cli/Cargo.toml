@@ -1,0 +1,12 @@
+[package]
+name = "packobf_cli"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+packobf = { path = "../packobf" }
+clap = { version = "4.6.0", features = ["derive"] }
+tokio = "1.50"
+indicatif = "0.18.4"
+console = "0.16.3"

@@ -1,0 +1,20 @@
+[workspace]
+members = [
+    "packobf_cli",
+    "packobf",
+    "java/rust"
+]
+resolver = "3"
+
+[patch.crates-io]
+glsl-lang = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
+glsl-lang-pp = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
+glsl-lang-lexer = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
+glsl-lang-types = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

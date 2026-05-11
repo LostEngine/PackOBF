@@ -1,0 +1,13 @@
+[package]
+name = "rust"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+jni = "0.22.4"
+packobf = { path = "../../packobf" }
+tokio = "1.52.1"
+
+[lib]
+crate-type = ["cdylib"]
