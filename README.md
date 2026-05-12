@@ -70,3 +70,44 @@ PackOBF is an open-source software distributed under the MIT license. See [`LICE
 
 > [!NOTE]
 > No code from any other project has been "stolen" or used as inspiration, all researches were made using public server resource packs and online resources such as [ImHex](https://github.com/werwolv/imhex).
+
+## How to use the library (for developers)
+
+### Java
+
+Adding the dependency (Gradle)
+###### build.gradle.kts
+```kts
+repositories {
+    maven {
+        url = uri("https://repo.misieur.me/repository")
+    }
+}
+
+dependencies {
+    compileOnly("dev.misieur:packobf:0.1.0")
+}
+```
+
+Using PackOBF
+```java
+byte[] bytes = /* The bytes of your built resource pack readable by any software */;
+PackObf.load(); // Makes sure PackOBF is loaded (required)
+try {
+    byte[] output = PackObf.optimizeZip( // Optimize resource pack and get the new byte array
+            bytes,
+            new PackObf.Options( // Configure PackOBF
+                    PackObf.Options.SIMPLEST,
+                    PackObf.Options.NONE,
+                    true,
+                    true,
+                    true
+            ),
+            (level, message) -> System.out.println(message), // Message logger
+            (state, current, total, currentString) -> System.out.println(state), // Progress logger (can be used in bossbar for example)
+            "path/to/cachefile.bin" // Nullable
+    );
+} catch (IOException e) { // PackOBF will throw a Java exception if it fails to optimize the resource pack
+    e.printStackTrace();
+}
+```
