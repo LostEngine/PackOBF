@@ -100,7 +100,7 @@ public class PackObf {
             LogCallback logCallback,
             ProgressCallback progressCallback,
             String cacheFile
-    );
+    ) throws IOException;
 
     public static void load() throws IOException {
         if (enabled) return;
