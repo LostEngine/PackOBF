@@ -7,9 +7,10 @@ pub mod renamer;
 pub mod resource_pack;
 pub mod shader_minifier;
 pub mod utils;
+mod file_parser;
+pub mod usage_checker;
 
 use crate::cache::Cache;
-use crate::minecraft::builtin_files::AtlasType;
 use crate::optimized_zip_writer::OptimizedZipWriter;
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
@@ -24,12 +25,11 @@ use crate::resource_pack::files::sound_definitions::SoundDefinitions;
 use crate::resource_pack::files::texture::Texture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
-use crate::resource_pack::mapping::Mapping;
+use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
 use crate::resource_pack::resource_pack::ResourcePack;
-use crate::LogLevel::{Error, Info};
+use crate::LogLevel::Info;
 use rayon::prelude::*;
 use std::io::{Cursor, Read};
-use std::str::FromStr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -71,244 +71,20 @@ pub fn process_zip(
 
     let pack = Arc::new(ResourcePack::default());
 
-    let progress_clone = progress.clone();
-    let pack_clone = Arc::clone(&pack);
-    entries.par_iter_mut().for_each(move |(name, content)| {
-        let _ = progress_clone.send(Progress::Parsing {
-            current: name.to_string(),
-        });
-        if name.ends_with(".json") {
-            let asset_type = get_type(&name);
-            if asset_type == Some("models")
-                || asset_type == Some("blockstates")
-                || asset_type == Some("items")
-                || asset_type == Some("font")
-                || asset_type == Some("atlases")
-            {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = String::from_utf8(content.to_owned()).unwrap();
-                match asset_type.unwrap() {
-                    "models" => {
-                        match Model::from_json(overlay, identifier, &json_str) {
-                            Ok(value) => {
-                                pack_clone.model(value);
-                            }
-                            Err(e) => {
-                                let _ = logger.send(LogMessage {
-                                    level: Error,
-                                    message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                            }
-                        }
-                    }
-                    "blockstates" => {
-                        match Blockstate::from_json(overlay, identifier, &json_str) {
-                            Ok(value) => {
-                                pack_clone.blockstate(value);
-                            }
-                            Err(e) => {
-                                let _ = logger.send(LogMessage {
-                                    level: Error,
-                                    message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                            }
-                        }
-                    }
-                    "items" => {
-                        match Item::from_json(overlay, identifier, &json_str) {
-                            Ok(value) => {
-                                pack_clone.item(value);
-                            }
-                            Err(e) => {
-                                let _ = logger.send(LogMessage {
-                                    level: Error,
-                                    message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                            }
-                        }
-                    }
-                    "font" => {
-                        match Font::from_json(overlay, identifier, &json_str) {
-                            Ok(value) => {
-                                pack_clone.font(value);
-                            }
-                            Err(e) => {
-                                let _ = logger.send(LogMessage {
-                                    level: Error,
-                                    message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                            }
-                        }
-                    }
-                    "atlases" => {
-                        match AtlasType::from_str(identifier.path.as_str()) {
-                            Ok(atlas_type) => {
-                                match Atlas::from_json(overlay, atlas_type, &json_str) {
-                                    Ok(value) => {
-                                        pack_clone.atlas(value);
-                                    }
-                                    Err(e) => {
-                                        let _ = logger.send(LogMessage {
-                                            level: Error,
-                                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                        });
-                                        pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                                    }
-                                }
-                            }
-                            Err(_) => {
-                                let _ = logger.send(
-                                    LogMessage {
-                                        level: Error,
-                                        message: format!(
-                                            "Unknown atlas type '{}'",
-                                            name,
-                                        ),
-                                    });
-                                pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                            }
-                        }
-                    }
-                    _ => unreachable!(),
-                }
-            } else {
-                if name.ends_with("/sounds.json") {
-                    let (overlay, identifier) = parse_path(&name);
-                    let json_str = String::from_utf8(content.to_owned()).unwrap();
-                    match SoundDefinitions::from_json(overlay, identifier.namespace, &json_str) {
-                        Ok(value) => {
-                            pack_clone.sound_definitions(value);
-                        }
-                        Err(e) => {
-                            let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
-                            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                        }
-                    }
-                } else {
-                    match serde_json::from_slice(&content) {
-                        Ok(value) => {
-                            pack_clone.json_file(Json::new(name.to_owned(), value));
-                        }
-                        Err(e) => {
-                            let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
-                            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                        }
-                    }
-                }
-            }
-        } else if name.ends_with(".mcmeta") {
-            match serde_json::from_slice(&content) {
-                Ok(value) => {
-                    pack_clone.json_file(Json::new(name.to_owned(), value));
-                }
-                Err(e) => {
-                    let _ = logger.send(LogMessage {
-                        level: Error,
-                        message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                    });
-                    pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-                }
-            }
-        } else if name.ends_with(".png") && get_type(&name) == Some("textures") {
-            let (overlay, identifier) = parse_path(&name);
-            pack_clone.texture(Texture::new(overlay, identifier, content.to_owned()));
-        } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
-            pack_clone.shader(Shader::new(
-                name.to_owned(),
-                String::from_utf8(content.to_owned()).unwrap(),
-            ));
-        } else if name.ends_with(".ogg") && get_type(&name) == Some("sounds") {
-            let (overlay, identifier) = parse_path(&name);
-            pack_clone.sound(Sound::new(overlay, identifier, content.to_owned()));
-        } else {
-            pack_clone.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-        }
-    });
+    let id_usage_counter = IdUsageCounter::default();
+    mapping::set_id_usage_counter(id_usage_counter);
+
+    file_parser::parse_resource_pack_files(logger, &mut entries, progress.clone(), Arc::clone(&pack));
+
+    usage_checker::check_usage(logger, &pack);
 
     let mut mapping = Mapping::default();
     if options.rename_files {
         renamer::rename_files(logger, &pack, &mut mapping);
     }
-    mapping::set_mappings(mapping.clone());
+    mapping::set_mappings(mapping);
 
-    let texture_iter = pack
-        .textures
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Texture(o)));
-    let shader_iter = pack
-        .shaders
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Shader(o)));
-    let model_iter = pack
-        .models
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Model(o)));
-    let json_iter = pack
-        .json_files
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Json(o)));
-    let unknown_iter = pack
-        .unknown_files
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Unknown(o)));
-    let blockstate_iter = pack
-        .blockstates
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::BlockStateDefinition(o)));
-    let font_iter = pack
-        .fonts
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::FontDefinition(o)));
-    let item_iter = pack
-        .items
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::ItemDefinition(o)));
-    let sound_iter = pack
-        .sounds
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Sound(o)));
-    let sound_definitions_iter = pack
-        .sound_definitions
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::SoundDefinitions(o)));
-    let atlas_iter = pack
-        .atlases
-        .clone()
-        .into_iter()
-        .map(|(name, o)| (name, ResourcePackItem::Atlas(o)));
-
-    let mut items: Vec<(String, ResourcePackItem)> = texture_iter
-        .chain(shader_iter)
-        .chain(model_iter)
-        .chain(json_iter)
-        .chain(unknown_iter)
-        .chain(blockstate_iter)
-        .chain(font_iter)
-        .chain(item_iter)
-        .chain(sound_iter)
-        .chain(sound_definitions_iter)
-        .chain(atlas_iter)
-        .collect();
+    let mut items = collect_files(pack);
 
     let total = items.len();
     let mut output = Cursor::new(Vec::new());
@@ -345,7 +121,7 @@ pub fn process_zip(
         if !name.starts_with("assets/") {
             let mut parts = name.split('/');
             let overlay = parts.next().unwrap().to_string();
-            if let Some(value) = mapping.overlay_mappings.get(&overlay) {
+            if let Some(value) = mapping::GLOBAL_MAPPING.get().expect("Mappings not initialized").overlay_mappings.get(&overlay) {
                 let rest = parts.collect::<Vec<_>>().join("/");
                 *name = format!("{}/{}", value, rest);
             }
@@ -405,6 +181,77 @@ pub fn process_zip(
 
     let _ = progress.send(Progress::Done);
     Ok(output.into_inner())
+}
+
+fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
+    let texture_iter = pack
+        .textures
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Texture(o)));
+    let shader_iter = pack
+        .shaders
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Shader(o)));
+    let model_iter = pack
+        .models
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Model(o)));
+    let json_iter = pack
+        .json_files
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Json(o)));
+    let unknown_iter = pack
+        .unknown_files
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Unknown(o)));
+    let blockstate_iter = pack
+        .blockstates
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::BlockStateDefinition(o)));
+    let font_iter = pack
+        .fonts
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::FontDefinition(o)));
+    let item_iter = pack
+        .items
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::ItemDefinition(o)));
+    let sound_iter = pack
+        .sounds
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Sound(o)));
+    let sound_definitions_iter = pack
+        .sound_definitions
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::SoundDefinitions(o)));
+    let atlas_iter = pack
+        .atlases
+        .clone()
+        .into_iter()
+        .map(|(name, o)| (name, ResourcePackItem::Atlas(o)));
+
+    texture_iter
+        .chain(shader_iter)
+        .chain(model_iter)
+        .chain(json_iter)
+        .chain(unknown_iter)
+        .chain(blockstate_iter)
+        .chain(font_iter)
+        .chain(item_iter)
+        .chain(sound_iter)
+        .chain(sound_definitions_iter)
+        .chain(atlas_iter)
+        .collect()
 }
 
 #[derive(Clone, Debug)]

@@ -20,7 +20,7 @@ pub struct Model {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub textures: Option<HashMap<String, TextureId>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub elements: Option<Vec<serde_json::Value>>,
+    pub elements: Option<Vec<Element>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gui_light: Option<String>,
 }
