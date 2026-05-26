@@ -1,4 +1,5 @@
 pub mod cache;
+mod file_parser;
 pub mod minecraft;
 pub mod optimized_zip_writer;
 pub mod options;
@@ -6,9 +7,8 @@ pub mod png;
 pub mod renamer;
 pub mod resource_pack;
 pub mod shader_minifier;
-pub mod utils;
-mod file_parser;
 pub mod usage_checker;
+pub mod utils;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
@@ -74,7 +74,12 @@ pub fn process_zip(
     let id_usage_counter = IdUsageCounter::default();
     mapping::set_id_usage_counter(id_usage_counter);
 
-    file_parser::parse_resource_pack_files(logger, &mut entries, progress.clone(), Arc::clone(&pack));
+    file_parser::parse_resource_pack_files(
+        logger,
+        &mut entries,
+        progress.clone(),
+        Arc::clone(&pack),
+    );
 
     usage_checker::check_usage(logger, &pack);
 
@@ -121,7 +126,7 @@ pub fn process_zip(
         if !name.starts_with("assets/") {
             let mut parts = name.split('/');
             let overlay = parts.next().unwrap().to_string();
-            if let Some(value) = mapping::GLOBAL_MAPPING.get().expect("Mappings not initialized").overlay_mappings.get(&overlay) {
+            if let Some(value) = mapping::get_mappings().overlay_mappings.get(&overlay) {
                 let rest = parts.collect::<Vec<_>>().join("/");
                 *name = format!("{}/{}", value, rest);
             }

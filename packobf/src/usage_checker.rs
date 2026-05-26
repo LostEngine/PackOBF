@@ -11,9 +11,7 @@ use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
-    let counter = mapping::GLOBAL_ID_USAGE_COUNTER
-        .get()
-        .expect("Counter not initialized");
+    let counter = mapping::get_id_usage_counter();
 
     check_category(
         logger,

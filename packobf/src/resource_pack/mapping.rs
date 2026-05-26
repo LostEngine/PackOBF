@@ -1,8 +1,9 @@
 use crate::minecraft::builtin_files;
+use arc_swap::ArcSwap;
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::OnceLock;
+use std::sync::{Arc, LazyLock};
 
 #[derive(Debug, Clone, Copy)]
 pub enum IdCategory {
@@ -11,7 +12,8 @@ pub enum IdCategory {
     Sound,
 }
 
-pub static GLOBAL_MAPPING: OnceLock<Mapping> = OnceLock::new();
+pub static GLOBAL_MAPPING: LazyLock<ArcSwap<Mapping>> =
+    LazyLock::new(|| ArcSwap::from_pointee(Mapping::default()));
 
 #[derive(Clone, Debug, Default)]
 pub struct Mapping {
@@ -45,10 +47,15 @@ impl Mapping {
 }
 
 pub fn set_mappings(m: Mapping) {
-    GLOBAL_MAPPING.set(m).ok();
+    GLOBAL_MAPPING.store(Arc::new(m));
 }
 
-pub static GLOBAL_ID_USAGE_COUNTER: OnceLock<IdUsageCounter> = OnceLock::new();
+pub fn get_mappings() -> Arc<Mapping> {
+    GLOBAL_MAPPING.load_full()
+}
+
+pub static GLOBAL_ID_USAGE_COUNTER: LazyLock<ArcSwap<IdUsageCounter>> =
+    LazyLock::new(|| ArcSwap::from_pointee(IdUsageCounter::default()));
 
 #[derive(Debug, Default)]
 pub struct IdUsageCounter {
@@ -86,8 +93,32 @@ impl IdUsageCounter {
             }
         }
     }
+
+    pub fn get_usage_count(&self, id: &str, category: IdCategory) -> usize {
+        match category {
+            IdCategory::Model => self
+                .model_counter
+                .get(id)
+                .map(|counter| counter.load(Ordering::Relaxed))
+                .unwrap_or(0),
+            IdCategory::Texture => self
+                .texture_counter
+                .get(id)
+                .map(|counter| counter.load(Ordering::Relaxed))
+                .unwrap_or(0),
+            IdCategory::Sound => self
+                .sound_counter
+                .get(id)
+                .map(|counter| counter.load(Ordering::Relaxed))
+                .unwrap_or(0),
+        }
+    }
 }
 
 pub fn set_id_usage_counter(c: IdUsageCounter) {
-    GLOBAL_ID_USAGE_COUNTER.set(c).ok();
+    GLOBAL_ID_USAGE_COUNTER.store(Arc::new(c));
+}
+
+pub fn get_id_usage_counter() -> Arc<IdUsageCounter> {
+    GLOBAL_ID_USAGE_COUNTER.load_full()
 }

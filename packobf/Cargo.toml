@@ -28,6 +28,7 @@ image = "0.25.10"
 clap = { version = "4.6.1", features = ["derive"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
+arc-swap = "1"
 
 [build-dependencies]
 phf_codegen = "0.13.1"

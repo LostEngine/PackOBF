@@ -1,4 +1,4 @@
-use crate::resource_pack::mapping::{IdCategory, GLOBAL_MAPPING, GLOBAL_ID_USAGE_COUNTER};
+use crate::resource_pack::mapping::{get_id_usage_counter, get_mappings, IdCategory};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[derive(Clone, Debug, Default)]
@@ -67,7 +67,7 @@ macro_rules! impl_id_wrapper {
     ($name:ident, $category:expr $(, $suffix:expr)?) => {
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mapping = GLOBAL_MAPPING.get().expect("Mappings not initialized");
+                let mapping = get_mappings();
                 let id_str = self.0.to_string();
                 let mapped = mapping.apply_mapping(&id_str, $category);
 
@@ -101,7 +101,7 @@ macro_rules! impl_id_wrapper {
                     s
                 };
                 let id = Identifier::parse(&path);
-                let counter = GLOBAL_ID_USAGE_COUNTER.get().expect("Counter not initialized");
+                let counter = get_id_usage_counter();
                 counter.increment_counter(id.to_string(), $category);
 
                 Ok(Self(id))
