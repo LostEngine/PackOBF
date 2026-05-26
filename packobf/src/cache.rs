@@ -43,7 +43,6 @@ pub enum ItemType {
     Generic = 0,
     Image = 1,
     Sound = 2,
-    Shader = 3,
 }
 
 impl ItemType {
@@ -51,7 +50,6 @@ impl ItemType {
         match value {
             1 => ItemType::Image,
             2 => ItemType::Sound,
-            3 => ItemType::Shader,
             _ => ItemType::Generic,
         }
     }

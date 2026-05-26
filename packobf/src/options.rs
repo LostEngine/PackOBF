@@ -38,7 +38,7 @@ impl Options {
     pub fn normal() -> Self {
         Self {
             compression: Compression::Normal,
-            shader_compression: ShaderCompression::Minify,
+            shader_compression: ShaderCompression::None,
             rename_files: false,
             block_unzipping: false,
             corrupt_png_files: false,

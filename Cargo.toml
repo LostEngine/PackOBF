@@ -2,7 +2,8 @@
 members = [
     "packobf_cli",
     "packobf",
-    "java/rust"
+    "java/rust",
+    "packobf_gui"
 ]
 resolver = "3"
 

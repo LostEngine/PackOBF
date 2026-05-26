@@ -128,7 +128,7 @@ pub fn process_zip(
         }
         match item {
             ResourcePackItem::Texture(t) => t.optimize(&options, &logger, &cache),
-            ResourcePackItem::Shader(s) => s.optimize(&options, &logger, &cache),
+            ResourcePackItem::Shader(s) => s.optimize(&options, &logger),
             ResourcePackItem::Sound(s) => s.optimize(&logger, &cache),
             _ => {}
         }
