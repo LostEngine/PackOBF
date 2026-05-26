@@ -13,5 +13,6 @@ accepted = [
     "NCSA",
     "CC0-1.0",
     "MIT-0",
+    "BSL-1.0"
 ]
 #cargo about generate about.hbs > THIRD_PARTY_LICENSES.md
