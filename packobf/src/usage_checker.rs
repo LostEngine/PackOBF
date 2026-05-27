@@ -3,9 +3,7 @@ use crate::resource_pack::mapping;
 use crate::resource_pack::resource_pack::ResourcePack;
 use crate::LogLevel::Warning;
 use crate::{profile_scope, LogMessage};
-use dashmap::mapref::multiple::RefMulti;
 use dashmap::DashMap;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
@@ -14,32 +12,32 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
     profile_scope!("check_usage");
     let counter = mapping::get_id_usage_counter();
 
-    check_category(
-        logger,
-        "Model",
-        &pack.models,
-        &counter.model_counter,
-        |m| m.identifier.to_string(),
-        |id| builtin_files::is_in_models(id),
-    );
-
-    check_category(
-        logger,
-        "Texture",
-        &pack.textures,
-        &counter.texture_counter,
-        |t| t.identifier.to_string(),
-        |id| builtin_files::is_in_textures(id),
-    );
-
-    check_category(
-        logger,
-        "Sound",
-        &pack.sounds,
-        &counter.sound_counter,
-        |s| s.identifier.to_string(),
-        |id| builtin_files::is_in_sounds(id),
-    );
+    rayon::scope(|s| {
+        s.spawn(|_| check_category(
+            logger,
+            "Model",
+            &pack.models,
+            &counter.model_counter,
+            |m| m.identifier.to_string(),
+            |id| builtin_files::is_in_models(id),
+        ));
+        s.spawn(|_| check_category(
+            logger,
+            "Texture",
+            &pack.textures,
+            &counter.texture_counter,
+            |t| t.identifier.to_string(),
+            |id| builtin_files::is_in_textures(id),
+        ));
+        s.spawn(|_| check_category(
+            logger,
+            "Sound",
+            &pack.sounds,
+            &counter.sound_counter,
+            |s| s.identifier.to_string(),
+            |id| builtin_files::is_in_sounds(id),
+        ));
+    });
 }
 
 fn check_category<T>(
@@ -59,7 +57,7 @@ fn check_category<T>(
         .map(|entry| entry.key().clone())
         .collect();
 
-    pack_map.par_iter().for_each(|entry: RefMulti<String, T>| {
+    for entry in pack_map {
         let id = get_id(entry.value());
         if !ids_referenced.contains(&id) {
             let _ = logger.send(LogMessage {
@@ -67,9 +65,9 @@ fn check_category<T>(
                 message: format!("Unused {}: {} (File: {})", label, id, entry.key()),
             });
         }
-    });
+    }
 
-    counter_map.par_iter().for_each(|entry| {
+    for entry in counter_map {
         let id = entry.key();
         if !is_built_in(id) && !ids_in_pack.contains(id) {
             let _ = logger.send(LogMessage {
@@ -80,5 +78,5 @@ fn check_category<T>(
                 ),
             });
         }
-    });
+    }
 }
