@@ -1,7 +1,7 @@
 use crate::resource_pack::identifier::{Identifier, ModelId, TextureId};
+use crate::utils::clean_json_numbers;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::utils::clean_json_numbers;
 
 // models are referenced in `items` and `blockstates`
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -21,6 +21,8 @@ pub struct Model {
     pub textures: Option<HashMap<String, TextureId>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub elements: Option<Vec<Element>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub overrides: Option<Vec<Override>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gui_light: Option<String>,
 }
@@ -122,8 +124,7 @@ pub struct Face {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub uv: Option<[f32; 4]>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub texture: Option<String>, // an id to textures in the model
+    pub texture: String, // an id to textures in the model
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cullface: Option<String>,
@@ -133,4 +134,11 @@ pub struct Face {
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rotation: Option<i32>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Override {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub predicate: Option<Vec<String>>,
+    pub model: String,
 }
