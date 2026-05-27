@@ -24,12 +24,15 @@ jobs:
         include:
           - os: windows-latest
             cli: packobf_cli.exe
+            gui: packobf_gui.exe
             java-lib: rust.dll
           - os: macos-latest
             cli: packobf_cli
+            gui: packobf_gui
             java-lib: librust.dylib
           - os: ubuntu-latest
             cli: packobf_cli
+            gui: packobf_gui
             java-lib: librust.so
     steps:
       - name: Checkout sources
@@ -50,13 +53,24 @@ jobs:
       - name: Prepare CLI Executable
         # Always make sure files that are published contain the license files
         run: |
-          mkdir -p dist
+          rm -rf dist && mkdir -p dist
           cp target/release/${{ matrix.cli }} dist/
           cp LICENSE.md dist/
       - name: Upload CLI Executable
         uses: actions/upload-artifact@v4
         with:
           name: cli-${{ matrix.os }}
+          path: dist/*
+      - name: Prepare GUI Executable
+        # Always make sure files that are published contain the license files
+        run: |
+          rm -rf dist && mkdir -p dist
+          cp target/release/${{ matrix.gui }} dist/
+          cp LICENSE.md dist/
+      - name: Upload GUI Executable
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.os }}
           path: dist/*
       - name: Prepare Java Native Library
         run: |

@@ -2,9 +2,8 @@ use glsl_lang::ast::FunIdentifierData::TypeSpecifier;
 use glsl_lang::ast::{
     AssignmentOp, AssignmentOpData, BinaryOpData, Declaration, DeclarationData, Expr, ExprData,
     ExternalDeclarationData, FunIdentifier, FunIdentifierData, FunctionDefinition,
-    FunctionParameterDeclarationData, IdentifierData, PreprocessorDefine,
-    PreprocessorDefineData, StorageQualifierData, TranslationUnit, TypeQualifierSpecData,
-    TypeSpecifierNonArrayData,
+    FunctionParameterDeclarationData, IdentifierData, PreprocessorDefine, PreprocessorDefineData,
+    StorageQualifierData, TranslationUnit, TypeQualifierSpecData, TypeSpecifierNonArrayData,
 };
 use glsl_lang::parse::DefaultParse;
 use glsl_lang::transpiler::glsl;
@@ -13,6 +12,8 @@ use glsl_lang::visitor::{HostMut, Visit, VisitorMut};
 use once_cell::sync::Lazy;
 use smol_str::SmolStr;
 use std::collections::HashMap;
+
+use crate::profile_scope;
 
 pub struct Minifier {
     function_mapping: HashMap<String, String>,
@@ -61,6 +62,7 @@ impl Minifier {
         source: &str,
         rename: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
+        profile_scope!("minify_shader");
         let mut ast =
             TranslationUnit::parse(source).map_err(|e| format!("GLSL Parse Error: {}", e))?;
 
@@ -124,9 +126,11 @@ impl<'a> VisitorMut for NameCollector<'a> {
     fn visit_declaration(&mut self, decl: &mut Declaration) -> Visit {
         if let DeclarationData::InitDeclaratorList(list) = &mut decl.content {
             let is_storage = if let Some(qualifier) = &list.head.ty.content.qualifier {
-                qualifier.content.qualifiers.iter().any(|q| {
-                    matches!(q.content, TypeQualifierSpecData::Storage(_))
-                })
+                qualifier
+                    .content
+                    .qualifiers
+                    .iter()
+                    .any(|q| matches!(q.content, TypeQualifierSpecData::Storage(_)))
             } else {
                 false
             };

@@ -22,3 +22,7 @@ rfd = "0.15"
 arboard = "3"
 
 packobf = { path = "../packobf" }
+
+[features]
+default = []
+profiling = ["packobf/profiling"]

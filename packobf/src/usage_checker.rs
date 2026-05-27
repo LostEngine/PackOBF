@@ -2,7 +2,7 @@ use crate::minecraft::builtin_files;
 use crate::resource_pack::mapping;
 use crate::resource_pack::resource_pack::ResourcePack;
 use crate::LogLevel::Warning;
-use crate::LogMessage;
+use crate::{profile_scope, LogMessage};
 use dashmap::mapref::multiple::RefMulti;
 use dashmap::DashMap;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -11,6 +11,7 @@ use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
+    profile_scope!("check_usage");
     let counter = mapping::get_id_usage_counter();
 
     check_category(

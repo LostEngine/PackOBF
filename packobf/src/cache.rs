@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufWriter, Read, Write};
 
+use crate::profile_scope;
+
 const MAGIC_NUMBER: [u8; 8] = *b"PACKOBF1";
 pub const VERSION: u16 = 1;
 
@@ -61,6 +63,7 @@ pub struct Cache {
 
 impl Cache {
     pub fn save_to_file(&self, path: &str) -> io::Result<()> {
+        profile_scope!("save_to_file::cache");
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
@@ -95,6 +98,7 @@ impl Cache {
     }
 
     pub fn load_from_file(path: &str) -> io::Result<Self> {
+        profile_scope!("load_from_file::cache");
         let file = File::open(path);
         if let Err(e) = file {
             return if e.kind() == io::ErrorKind::NotFound {

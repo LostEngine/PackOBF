@@ -1,7 +1,10 @@
 use image::codecs::png::{CompressionType, FilterType, PngEncoder};
 use image::{ExtendedColorType, ImageEncoder};
 
+use crate::profile_scope;
+
 pub fn recover_png(input: &[u8]) -> Result<Vec<u8>, String> {
+    profile_scope!("recover_png");
     unsafe {
         let mut width: i32 = 0;
         let mut height: i32 = 0;
@@ -39,7 +42,11 @@ fn rebuild_png(pixels: Vec<u8>, w: u32, h: u32, channels: i32) -> Result<Vec<u8>
         _ => return Err("Unsupported channel count".to_string()),
     };
 
-    let encoder = PngEncoder::new_with_quality(&mut output, CompressionType::Uncompressed, FilterType::Adaptive);
+    let encoder = PngEncoder::new_with_quality(
+        &mut output,
+        CompressionType::Uncompressed,
+        FilterType::Adaptive,
+    );
     encoder
         .write_image(&pixels, w, h, color_type)
         .map_err(|e| e.to_string())?;

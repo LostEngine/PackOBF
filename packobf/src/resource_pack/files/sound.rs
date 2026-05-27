@@ -1,7 +1,7 @@
 use crate::cache::{Cache, ItemType};
 use crate::resource_pack::identifier::Identifier;
 use crate::LogLevel::{Info, Warning};
-use crate::LogMessage;
+use crate::{profile_scope, LogMessage};
 use optivorbis::remuxer::ogg_to_ogg::{OggVorbisStreamPassthroughMangler, Settings};
 use optivorbis::VorbisCommentFieldsAction::Delete;
 use optivorbis::VorbisVendorStringAction::Empty;
@@ -34,6 +34,7 @@ impl Sound {
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
     ) {
+        profile_scope!("optimize::sound");
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
             sha256.update(self.bytes.as_slice());

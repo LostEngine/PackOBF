@@ -1,6 +1,6 @@
 use crate::options::ShaderCompression;
 use crate::shader_minifier::minifier::Minifier;
-use crate::LogLevel::{Warning};
+use crate::LogLevel::Warning;
 use crate::LogMessage;
 
 #[derive(Clone, Debug)]
@@ -20,7 +20,7 @@ impl Shader {
     pub fn optimize(
         &mut self,
         options: &crate::options::Options,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>
+        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
     ) {
         if options.shader_compression == ShaderCompression::None {
             return;

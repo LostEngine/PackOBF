@@ -3,7 +3,7 @@ use crate::options::{Compression, Options};
 use crate::png::{crc, recoverer};
 use crate::resource_pack::identifier::Identifier;
 use crate::LogLevel::{Info, Warning};
-use crate::{options, LogMessage};
+use crate::{options, profile_scope, LogMessage};
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, StripChunks};
 use sha2::{Digest, Sha256};
@@ -59,6 +59,7 @@ impl Texture {
         cache: &Option<Cache>,
         path: &str,
     ) -> Vec<u8> {
+        profile_scope!("cache_or_optimize::texture");
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
             sha256.update(bytes);

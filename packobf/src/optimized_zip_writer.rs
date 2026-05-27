@@ -1,6 +1,7 @@
 use crate::cache::{Cache, ItemType};
 pub(crate) use crate::options::ZOPFLI_OPTIONS;
 use crate::options::{Compression, Options};
+use crate::profile_scope;
 use byteorder::{LittleEndian, WriteBytesExt};
 use crc32fast::Hasher as Crc32Hasher;
 use dashmap::DashMap;
@@ -53,6 +54,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         options: &Options,
         cache: &Option<Cache>,
     ) -> io::Result<()> {
+        profile_scope!("add_file::zip");
         let mut sha256 = Sha256::new();
         sha256.update(data);
         let hash: [u8; 32] = sha256.finalize().into();
@@ -133,7 +135,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 })
                 .flatten()
             {
-                return Ok(bytes)
+                return Ok(bytes);
             }
         }
         Ok(match options.compression {
@@ -212,6 +214,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     /// Writes the Central Directory and End of Central Directory (EOCD) records.
     /// This finalizes the ZIP file, making it valid for CD-parsing tools.
     pub fn finish(&self) -> io::Result<()> {
+        profile_scope!("finish::zip");
         let mut inner_guard = self.inner.lock().unwrap();
         let Inner {
             ref mut writer,

@@ -8,7 +8,7 @@ use crate::resource_pack::files::texture::Texture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping::{self, Mapping};
 use crate::resource_pack::resource_pack::ResourcePack;
-use crate::{LogLevel, LogMessage};
+use crate::{profile_scope, LogLevel, LogMessage};
 use serde_json::json;
 use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
@@ -18,14 +18,18 @@ pub fn rename_files(
     pack: &ResourcePack,
     mapping: &mut Mapping,
 ) {
+    profile_scope!("rename_files");
     let id_counter = &mapping::get_id_usage_counter();
-    rename_overlays(pack, mapping);
-    rename_models(pack, mapping, id_counter);
-    rename_textures(logger, &pack, mapping, id_counter);
-    rename_sounds(pack, mapping, id_counter);
+    rayon::scope(|s| {
+        s.spawn(|_| rename_overlays(pack, &mut mapping.overlay_mappings));
+        s.spawn(|_| rename_models(pack, &mut mapping.model_mappings, id_counter));
+        s.spawn(|_| rename_textures(logger, &pack, &mut mapping.texture_mappings, id_counter));
+        s.spawn(|_| rename_sounds(pack, &mut mapping.sound_mappings, id_counter));
+    });
 }
 
-fn rename_overlays(pack: &ResourcePack, mapping: &mut Mapping) {
+fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
+    profile_scope!("rename_files::overlays");
     let mut count = 0;
     match pack.json_files.get_mut("pack.mcmeta") {
         Some(mut mcmeta) => {
@@ -41,7 +45,7 @@ fn rename_overlays(pack: &ResourcePack, mapping: &mut Mapping) {
                         if let Some(current_name) = current_name {
                             let new_name = generate_short_name(count);
                             *dir = json!(new_name.clone());
-                            mapping.overlay_mappings.insert(current_name, new_name);
+                            mapping.insert(current_name, new_name);
                             count += 1;
                         }
                     }
@@ -52,7 +56,12 @@ fn rename_overlays(pack: &ResourcePack, mapping: &mut Mapping) {
     }
 }
 
-fn rename_sounds(pack: &ResourcePack, mapping: &mut Mapping, id_counter: &mapping::IdUsageCounter) {
+fn rename_sounds(
+    pack: &ResourcePack,
+    mapping: &mut HashMap<String, String>,
+    id_counter: &mapping::IdUsageCounter,
+) {
+    profile_scope!("rename_files::sounds");
     let mut sounds: Vec<(String, Sound)> = pack
         .sounds
         .iter()
@@ -80,15 +89,13 @@ fn rename_sounds(pack: &ResourcePack, mapping: &mut Mapping, id_counter: &mappin
 
     for (count, (key, mut sound)) in sounds.into_iter().enumerate() {
         let identifier = sound.identifier.to_string();
-        if let Some(mapped) = mapping.sound_mappings.get(&identifier) {
+        if let Some(mapped) = mapping.get(&identifier) {
             sound.identifier.path = mapped.clone();
             pack.sounds.remove(&key);
             pack.sounds.insert(sound.path(), sound);
         } else {
             let new_identifier = Identifier::new("_", generate_short_name(count));
-            mapping
-                .sound_mappings
-                .insert(identifier, new_identifier.to_string());
+            mapping.insert(identifier, new_identifier.to_string());
             sound.identifier = new_identifier;
             pack.sounds.remove(&key);
             pack.sounds.insert(sound.path(), sound);
@@ -99,9 +106,10 @@ fn rename_sounds(pack: &ResourcePack, mapping: &mut Mapping, id_counter: &mappin
 fn rename_textures(
     logger: &UnboundedSender<LogMessage>,
     pack: &&ResourcePack,
-    mapping: &mut Mapping,
+    mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
+    profile_scope!("rename_files::textures");
     let mut textures: Vec<(String, Texture)> = pack
         .textures
         .iter()
@@ -131,7 +139,7 @@ fn rename_textures(
     let font_textures = get_font_textures(pack);
     for (_, (key, mut texture)) in textures.into_iter().enumerate() {
         let identifier = texture.identifier.to_string();
-        if let Some(mapped) = mapping.texture_mappings.get(&identifier) {
+        if let Some(mapped) = mapping.get(&identifier) {
             texture.identifier.path = mapped.clone();
             pack.textures.remove(&key);
             let new_path = texture.path();
@@ -195,9 +203,7 @@ fn rename_textures(
             let count = per_folder_count.entry(prefix.to_string()).or_insert(0);
             let path = prefix.to_owned() + generate_short_name(*count).as_str();
             let new_identifier = Identifier::new("_", path);
-            mapping
-                .texture_mappings
-                .insert(identifier, new_identifier.to_string());
+            mapping.insert(identifier, new_identifier.to_string());
             texture.identifier = new_identifier;
             pack.textures.remove(&key);
             let new_path = texture.path();
@@ -257,7 +263,12 @@ fn rebuild_atlas(pack: &ResourcePack) {
     }
 }
 
-fn rename_models(pack: &ResourcePack, mapping: &mut Mapping, id_counter: &mapping::IdUsageCounter) {
+fn rename_models(
+    pack: &ResourcePack,
+    mapping: &mut HashMap<String, String>,
+    id_counter: &mapping::IdUsageCounter,
+) {
+    profile_scope!("rename_files::models");
     let mut models: Vec<(String, Model)> = pack
         .models
         .iter()
@@ -285,15 +296,13 @@ fn rename_models(pack: &ResourcePack, mapping: &mut Mapping, id_counter: &mappin
 
     for (count, (key, mut model)) in models.into_iter().enumerate() {
         let identifier = model.identifier.to_string();
-        if let Some(mapped) = mapping.model_mappings.get(&identifier) {
+        if let Some(mapped) = mapping.get(&identifier) {
             model.identifier.path = mapped.clone();
             pack.models.remove(&key);
             pack.models.insert(model.path(), model);
         } else {
             let new_identifier = Identifier::new("_", generate_short_name(count));
-            mapping
-                .model_mappings
-                .insert(identifier, new_identifier.to_string());
+            mapping.insert(identifier, new_identifier.to_string());
             model.identifier = new_identifier;
             pack.models.remove(&key);
             pack.models.insert(model.path(), model);
