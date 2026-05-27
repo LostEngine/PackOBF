@@ -195,19 +195,19 @@ pub fn process_zip(
 
 fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
     profile_scope!("collect_files");
-    let texture_iter = pack.textures.iter().map(|kv| {
+    let texture_iter = pack.textures.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Texture(kv.value().clone()),
         )
     });
-    let shader_iter = pack.shaders.iter().map(|kv| {
+    let shader_iter = pack.shaders.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Shader(kv.value().clone()),
         )
     });
-    let model_iter = pack.models.iter().map(|kv| {
+    let model_iter = pack.models.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Model(kv.value().clone()),
@@ -215,45 +215,45 @@ fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
     });
     let json_iter = pack
         .json_files
-        .iter()
+        .par_iter()
         .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone())));
-    let unknown_iter = pack.unknown_files.iter().map(|kv| {
+    let unknown_iter = pack.unknown_files.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Unknown(kv.value().clone()),
         )
     });
-    let blockstate_iter = pack.blockstates.iter().map(|kv| {
+    let blockstate_iter = pack.blockstates.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::BlockStateDefinition(kv.value().clone()),
         )
     });
-    let font_iter = pack.fonts.iter().map(|kv| {
+    let font_iter = pack.fonts.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::FontDefinition(kv.value().clone()),
         )
     });
-    let item_iter = pack.items.iter().map(|kv| {
+    let item_iter = pack.items.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::ItemDefinition(kv.value().clone()),
         )
     });
-    let sound_iter = pack.sounds.iter().map(|kv| {
+    let sound_iter = pack.sounds.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Sound(kv.value().clone()),
         )
     });
-    let sound_definitions_iter = pack.sound_definitions.iter().map(|kv| {
+    let sound_definitions_iter = pack.sound_definitions.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::SoundDefinitions(kv.value().clone()),
         )
     });
-    let atlas_iter = pack.atlases.iter().map(|kv| {
+    let atlas_iter = pack.atlases.par_iter().map(|kv| {
         (
             kv.key().clone(),
             ResourcePackItem::Atlas(kv.value().clone()),
