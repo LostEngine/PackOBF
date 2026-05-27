@@ -2,6 +2,7 @@
 name = "packobf_gui"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 imgui = "0.12"
