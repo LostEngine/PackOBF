@@ -152,13 +152,38 @@ pub extern "system" fn Java_dev_misieur_packobf_PackObf_optimizeZip<'caller>(
             });
         }
 
-        let bytes = process_zip(input, &options, prog_tx, &log_tx, &cache_file).map_err(|e| {
-            let _ = env.throw_new(
-                JNIString::from("java/io/IOException"),
-                JNIString::from(format!("Zip processing failed: {}", e)),
-            );
-            Error::JavaException
-        })?;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            process_zip(input, &options, prog_tx, &log_tx, &cache_file)
+        }));
+
+        let bytes = match result {
+            Ok(Ok(bytes)) => bytes,
+
+            Ok(Err(e)) => {
+                let _ = env.throw_new(
+                    JNIString::from("java/io/IOException"),
+                    JNIString::from(format!("Zip processing failed: {}", e)),
+                );
+                return Err(Error::JavaException);
+            }
+
+            Err(panic) => {
+                let msg = if let Some(s) = panic.downcast_ref::<&str>() {
+                    s.to_string()
+                } else if let Some(s) = panic.downcast_ref::<String>() {
+                    s.clone()
+                } else {
+                    "Unknown Rust panic in process_zip".to_string()
+                };
+
+                let _ = env.throw_new(
+                    JNIString::from("java/io/IOException"),
+                    JNIString::from(format!("Rust panic during zip processing: {}", msg)),
+                );
+
+                return Err(Error::JavaException);
+            }
+        };
 
         let output: JByteArray = env.byte_array_from_slice(&bytes)?;
         Ok(output.into_raw())

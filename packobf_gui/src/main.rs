@@ -1,10 +1,3 @@
-use std::{
-    fs,
-    num::NonZeroU32,
-    sync::{Arc, Mutex},
-    time::Instant,
-};
-
 use arboard::Clipboard;
 use glow::HasContext;
 use glutin::{
@@ -15,21 +8,28 @@ use glutin::{
 };
 use imgui::*;
 use imgui_winit_support::{
+    HiDpiMode, WinitPlatform,
     winit::{
         dpi::LogicalSize,
         event::{Event, WindowEvent},
         event_loop::EventLoop,
         window::{Window, WindowAttributes},
     },
-    HiDpiMode,
-    WinitPlatform,
 };
 use packobf::{
-    options::{Compression, Options, ShaderCompression},
     LogLevel, LogMessage, Progress,
+    options::{Compression, Options, ShaderCompression},
 };
 use raw_window_handle::HasWindowHandle;
 use rfd::FileDialog;
+use std::fmt::{Display, Formatter};
+use std::panic::AssertUnwindSafe;
+use std::{
+    fs,
+    num::NonZeroU32,
+    sync::{Arc, Mutex},
+    time::Instant,
+};
 use tokio::sync::{mpsc, watch};
 
 const TITLE: &str = "packobf";
@@ -98,6 +98,23 @@ struct OptimizationStats {
     output_size: usize,
 }
 
+#[derive(Debug)]
+enum PackObfError {
+    Io(std::io::Error),
+    Packobf(String),
+    Panic(String),
+}
+
+impl Display for PackObfError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Self::Io(e) => write!(f, "IO error: {e}"),
+            Self::Packobf(e) => write!(f, "Processing error: {e}"),
+            Self::Panic(e) => write!(f, "Panic: {e}"),
+        }
+    }
+}
+
 fn main() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
@@ -108,8 +125,7 @@ fn main() {
 
     let gl = glow_context(&context);
 
-    let mut renderer =
-        imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui).unwrap();
+    let mut renderer = imgui_glow_renderer::AutoRenderer::new(gl, &mut imgui).unwrap();
 
     let mut last_frame = Instant::now();
 
@@ -140,13 +156,9 @@ fn main() {
                     ..
                 } => {
                     unsafe {
-                        renderer
-                            .gl_context()
-                            .clear_color(0.1, 0.1, 0.1, 1.0);
+                        renderer.gl_context().clear_color(0.1, 0.1, 0.1, 1.0);
 
-                        renderer
-                            .gl_context()
-                            .clear(glow::COLOR_BUFFER_BIT);
+                        renderer.gl_context().clear(glow::COLOR_BUFFER_BIT);
                     }
 
                     let ui = imgui.frame();
@@ -172,14 +184,13 @@ fn main() {
                 Event::WindowEvent {
                     event: WindowEvent::Resized(new_size),
                     ..
+                } if new_size.width > 0 && new_size.height > 0 => {
+                    surface.resize(
+                        &context,
+                        NonZeroU32::new(new_size.width).unwrap(),
+                        NonZeroU32::new(new_size.height).unwrap(),
+                    );
                 }
-                    if new_size.width > 0 && new_size.height > 0 => {
-                        surface.resize(
-                            &context,
-                            NonZeroU32::new(new_size.width).unwrap(),
-                            NonZeroU32::new(new_size.height).unwrap(),
-                        );
-                    }
 
                 _ => {}
             }
@@ -187,11 +198,7 @@ fn main() {
         .unwrap();
 }
 
-fn draw_ui(
-    ui: &Ui,
-    state: Arc<Mutex<AppState>>,
-    runtime: tokio::runtime::Handle,
-) {
+fn draw_ui(ui: &Ui, state: Arc<Mutex<AppState>>, runtime: tokio::runtime::Handle) {
     let mut app = state.lock().unwrap();
 
     let window_size = ui.io().display_size;
@@ -496,14 +503,15 @@ fn draw_ui(
         });
 }
 
-async fn run_packobf(
-    path: String,
-    cache: Option<String>,
-    state: Arc<Mutex<AppState>>,
-) {
+async fn run_packobf(path: String, cache: Option<String>, state: Arc<Mutex<AppState>>) {
     let started = Instant::now();
-    let input = fs::read(&path).unwrap();
-    let input_size = input.len() as usize;
+    let input = match fs::read(&path) {
+        Ok(v) => v,
+        Err(_) => {
+            return;
+        }
+    };
+    let input_size = input.len();
 
     let options = {
         let app = state.lock().unwrap();
@@ -517,11 +525,9 @@ async fn run_packobf(
         }
     };
 
-    let (progress_tx, mut progress_rx) =
-        watch::channel(Progress::Idle);
+    let (progress_tx, mut progress_rx) = watch::channel(Progress::Idle);
 
-    let (log_tx, mut log_rx) =
-        mpsc::unbounded_channel::<LogMessage>();
+    let (log_tx, mut log_rx) = mpsc::unbounded_channel::<LogMessage>();
 
     let state_progress = state.clone();
 
@@ -547,18 +553,15 @@ async fn run_packobf(
                     index,
                     total,
                 } => {
-                    format!(
-                        "Building ({}/{}) {}",
-                        index,
-                        total,
-                        current
-                    )
+                    format!("Building ({}/{}) {}", index, total, current)
                 }
 
                 Progress::Done => "Done".to_string(),
             };
 
-            state_progress.lock().unwrap().progress_text = text;
+            if let Ok(mut state) = state_progress.lock() {
+                state.progress_text = text;
+            }
         }
     });
 
@@ -566,21 +569,33 @@ async fn run_packobf(
 
     tokio::spawn(async move {
         while let Some(log) = log_rx.recv().await {
-            state_logs.lock().unwrap().logs.push(log);
+            if let Ok(mut state) = state_logs.lock() {
+                state.logs.push(log);
+            }
         }
     });
 
     let result = tokio::task::spawn_blocking(move || {
-        packobf::process_zip(
-            input,
-            &options,
-            progress_tx,
-            &log_tx,
-            &cache,
-        )
+        std::panic::catch_unwind(AssertUnwindSafe(|| {
+            packobf::process_zip(input, &options, progress_tx, &log_tx, &cache)
+        }))
     })
-    .await
-    .unwrap();
+    .await;
+
+    let result = match result {
+        Ok(inner) => match inner {
+            Ok(Ok(bytes)) => Ok(bytes),
+            Ok(Err(e)) => Err(PackObfError::Packobf(e.to_string())),
+            Err(panic) => Err(PackObfError::Panic(
+                panic
+                    .downcast_ref::<String>()
+                    .cloned()
+                    .or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "unknown panic".to_string()),
+            )),
+        },
+        Err(e) => Err(PackObfError::Packobf(e.to_string())),
+    };
 
     let mut app = state.lock().unwrap();
 
@@ -590,13 +605,13 @@ async fn run_packobf(
             let output_size = bytes.len();
 
             app.output = Some(bytes);
-            app.progress_text = format!("Done {:.3}s", started.elapsed().as_secs_f32());
+            app.progress_text = format!("Done {:.3}s", duration);
 
             app.stats = Some(OptimizationStats {
-                    duration,
-                    input_size,
-                    output_size,
-                });
+                duration,
+                input_size,
+                output_size,
+            });
 
             app.show_stats_popup = true;
         }
@@ -607,7 +622,11 @@ async fn run_packobf(
                 message: err.to_string(),
             });
 
-            app.progress_text = "Error".to_string();
+            app.progress_text = match err {
+                PackObfError::Io(_) => "File error".into(),
+                PackObfError::Packobf(_) => "Processing error".into(),
+                PackObfError::Panic(_) => "Rust panic".into(),
+            };
         }
     }
 
@@ -629,18 +648,15 @@ fn create_window() -> (
 
     let (window, cfg) = glutin_winit::DisplayBuilder::new()
         .with_window_attributes(Some(window_attributes))
-        .build(
-            &event_loop,
-            ConfigTemplateBuilder::new(),
-            |mut configs| configs.next().unwrap(),
-        )
+        .build(&event_loop, ConfigTemplateBuilder::new(), |mut configs| {
+            configs.next().unwrap()
+        })
         .unwrap();
 
     let window = window.unwrap();
 
     let context_attributes =
-        ContextAttributesBuilder::new()
-            .build(Some(window.window_handle().unwrap().as_raw()));
+        ContextAttributesBuilder::new().build(Some(window.window_handle().unwrap().as_raw()));
 
     let context = unsafe {
         cfg.display()
@@ -648,31 +664,22 @@ fn create_window() -> (
             .unwrap()
     };
 
-    let attrs = SurfaceAttributesBuilder::<WindowSurface>::new()
-        .build(
-            window.window_handle().unwrap().as_raw(),
-            NonZeroU32::new(1280).unwrap(),
-            NonZeroU32::new(720).unwrap(),
-        );
+    let attrs = SurfaceAttributesBuilder::<WindowSurface>::new().build(
+        window.window_handle().unwrap().as_raw(),
+        NonZeroU32::new(1280).unwrap(),
+        NonZeroU32::new(720).unwrap(),
+    );
 
-    let surface = unsafe {
-        cfg.display()
-            .create_window_surface(&cfg, &attrs)
-            .unwrap()
-    };
+    let surface = unsafe { cfg.display().create_window_surface(&cfg, &attrs).unwrap() };
 
     let context = context.make_current(&surface).unwrap();
 
     (event_loop, window, surface, context)
 }
 
-fn glow_context(
-    context: &PossiblyCurrentContext,
-) -> glow::Context {
+fn glow_context(context: &PossiblyCurrentContext) -> glow::Context {
     unsafe {
-        glow::Context::from_loader_function_cstr(|s| {
-            context.display().get_proc_address(s).cast()
-        })
+        glow::Context::from_loader_function_cstr(|s| context.display().get_proc_address(s).cast())
     }
 }
 
@@ -683,30 +690,27 @@ fn imgui_init(window: &Window) -> (WinitPlatform, imgui::Context) {
 
     let mut platform = WinitPlatform::new(&mut imgui);
 
-    platform.attach_window(
-        imgui.io_mut(),
-        window,
-        HiDpiMode::Rounded,
-    );
+    platform.attach_window(imgui.io_mut(), window, HiDpiMode::Rounded);
 
-    imgui.fonts().add_font(&[
-        FontSource::DefaultFontData {
-            config: None,
-        },
-    ]);
+    imgui
+        .fonts()
+        .add_font(&[FontSource::DefaultFontData { config: None }]);
 
-    imgui.io_mut().font_global_scale =
-        (1.0 / platform.hidpi_factor()) as f32;
+    imgui.io_mut().font_global_scale = (1.0 / platform.hidpi_factor()) as f32;
 
     (platform, imgui)
 }
 
 fn format_log(log_message: &LogMessage) -> String {
-    format!("{}: {}", match log_message.level {
-        LogLevel::Info => "INFO",
-        LogLevel::Warning => "WARNING",
-        LogLevel::Error => "ERROR",
-    }, log_message.message)
+    format!(
+        "{}: {}",
+        match log_message.level {
+            LogLevel::Info => "INFO",
+            LogLevel::Warning => "WARNING",
+            LogLevel::Error => "ERROR",
+        },
+        log_message.message
+    )
 }
 
 pub fn format_bytes(bytes: usize) -> String {
