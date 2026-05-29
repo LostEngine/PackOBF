@@ -11,7 +11,7 @@ use packobf::{LogMessage, Progress, process_zip};
 use tokio::sync::watch;
 
 #[unsafe(no_mangle)]
-pub extern "system" fn Java_dev_misieur_packobf_PackObf_optimizeZip<'caller>(
+pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
     input: JByteArray<'caller>,
