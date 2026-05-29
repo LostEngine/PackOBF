@@ -359,13 +359,17 @@ fn parse_path(path: &str) -> (String, Identifier) {
     let mut parts = path.split('/');
 
     // TODO: do something better
-    let overlay = parts.next().unwrap_or("").to_string();
+    let overlay = if path.starts_with("assets/") {
+        "".to_string()
+    } else {
+        parts.next().unwrap().to_string()
+    };
 
-    parts.next().unwrap_or(""); // skip assets
+    parts.next(); // skip assets
 
     let namespace = parts.next().unwrap_or("").to_string();
 
-    parts.next().unwrap_or(""); // skip type
+    parts.next(); // skip type
 
     let rest = parts.collect::<Vec<_>>().join("/");
 
