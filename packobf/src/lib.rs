@@ -361,11 +361,11 @@ fn parse_path(path: &str) -> (String, Identifier) {
     // TODO: do something better
     let overlay = parts.next().unwrap_or("").to_string();
 
-    parts.next(); // skip assets
+    parts.next().unwrap_or(""); // skip assets
 
     let namespace = parts.next().unwrap_or("").to_string();
 
-    parts.next(); // skip type
+    parts.next().unwrap_or(""); // skip type
 
     let rest = parts.collect::<Vec<_>>().join("/");
 
