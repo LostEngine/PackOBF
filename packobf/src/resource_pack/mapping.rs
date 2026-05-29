@@ -68,7 +68,7 @@ impl IdUsageCounter {
     pub fn increment_counter(&self, id: String, category: IdCategory) {
         match category {
             IdCategory::Model => {
-                if builtin_files::is_in_models(id.as_str()) {
+                if !builtin_files::is_in_models(id.as_str()) {
                     self.model_counter
                         .entry(id)
                         .or_insert_with(|| AtomicUsize::new(0))
@@ -84,7 +84,7 @@ impl IdUsageCounter {
                 }
             }
             IdCategory::Sound => {
-                if builtin_files::is_in_sounds(id.as_str()) {
+                if !builtin_files::is_in_sounds(id.as_str()) {
                     self.sound_counter
                         .entry(id)
                         .or_insert_with(|| AtomicUsize::new(0))
