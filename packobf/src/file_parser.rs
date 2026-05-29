@@ -10,9 +10,9 @@ use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
 use crate::resource_pack::files::texture::Texture;
-use crate::resource_pack::resource_pack::ResourcePack;
+use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Error;
-use crate::{LogMessage, Progress};
+use crate::{get_type, parse_path, LogMessage, Progress};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::str::FromStr;
 use std::sync::Arc;
@@ -55,86 +55,114 @@ fn parse_resource_pack_file(
         },
     );
     if name.ends_with(".json") {
-        let asset_type = crate::get_type(&name);
-        if asset_type == Some("models")
-            || asset_type == Some("blockstates")
-            || asset_type == Some("items")
-            || asset_type == Some("font")
-            || asset_type == Some("atlases")
-        {
-            let (overlay, identifier) = crate::parse_path(&name);
-            let json_str = String::from_utf8(content.to_owned()).unwrap();
-            match asset_type.unwrap() {
-                "models" => match Model::from_json(overlay, identifier, &json_str) {
+        match get_type(name) {
+            Some("models") => {
+                let (overlay, identifier) = parse_path(name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    Some(value) => value,
+                    None => return,
+                };
+                match Model::from_json(overlay, identifier, &json_str) {
                     Ok(value) => {
                         pack.model(value);
                     }
                     Err(e) => {
                         let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
+                            level: Error,
+                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                        });
                         pack.unknown_file(ResourcePackFile::new(
                             name.to_owned(),
                             content.to_owned(),
                         ));
                     }
-                },
-                "blockstates" => match Blockstate::from_json(overlay, identifier, &json_str) {
+                }
+            }
+            Some("blockstates") => {
+                let (overlay, identifier) = parse_path(name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    Some(value) => value,
+                    None => return,
+                };
+                match Blockstate::from_json(overlay, identifier, &json_str) {
                     Ok(value) => {
                         pack.blockstate(value);
                     }
                     Err(e) => {
                         let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
+                            level: Error,
+                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                        });
                         pack.unknown_file(ResourcePackFile::new(
                             name.to_owned(),
                             content.to_owned(),
                         ));
                     }
-                },
-                "items" => match Item::from_json(overlay, identifier, &json_str) {
+                }
+            }
+            Some("items") => {
+                let (overlay, identifier) = parse_path(name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    Some(value) => value,
+                    None => return,
+                };
+
+                match Item::from_json(overlay, identifier, &json_str) {
                     Ok(value) => {
                         pack.item(value);
                     }
                     Err(e) => {
                         let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
+                            level: Error,
+                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                        });
                         pack.unknown_file(ResourcePackFile::new(
                             name.to_owned(),
                             content.to_owned(),
                         ));
                     }
-                },
-                "font" => match Font::from_json(overlay, identifier, &json_str) {
+                }
+            }
+            Some("font") => {
+                let (overlay, identifier) = parse_path(name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    Some(value) => value,
+                    None => return,
+                };
+
+                match Font::from_json(overlay, identifier, &json_str) {
                     Ok(value) => {
                         pack.font(value);
                     }
                     Err(e) => {
                         let _ = logger.send(LogMessage {
-                                level: Error,
-                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                            });
+                            level: Error,
+                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                        });
                         pack.unknown_file(ResourcePackFile::new(
                             name.to_owned(),
                             content.to_owned(),
                         ));
                     }
-                },
-                "atlases" => match AtlasType::from_str(identifier.path.as_str()) {
+                }
+            }
+            Some("atlases") => {
+                let (overlay, identifier) = parse_path(name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    Some(value) => value,
+                    None => return,
+                };
+
+                match AtlasType::from_str(identifier.path.as_str()) {
                     Ok(atlas_type) => match Atlas::from_json(overlay, atlas_type, &json_str) {
                         Ok(value) => {
                             pack.atlas(value);
                         }
                         Err(e) => {
                             let _ = logger.send(LogMessage {
-                                        level: Error,
-                                        message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                                    });
+                                level: Error,
+                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                            });
                             pack.unknown_file(ResourcePackFile::new(
                                 name.to_owned(),
                                 content.to_owned(),
@@ -151,71 +179,90 @@ fn parse_resource_pack_file(
                             content.to_owned(),
                         ));
                     }
-                },
-                _ => unreachable!(),
-            }
-        } else {
-            if name.ends_with("/sounds.json") {
-                let (overlay, identifier) = crate::parse_path(&name);
-                let json_str = String::from_utf8(content.to_owned()).unwrap();
-                match SoundDefinitions::from_json(overlay, identifier.namespace, &json_str) {
-                    Ok(value) => {
-                        pack.sound_definitions(value);
-                    }
-                    Err(e) => {
-                        let _ = logger.send(LogMessage {
-                            level: Error,
-                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                        });
-                        pack.unknown_file(ResourcePackFile::new(
-                            name.to_owned(),
-                            content.to_owned(),
-                        ));
-                    }
                 }
-            } else {
-                match serde_json::from_slice(&content) {
-                    Ok(value) => {
-                        pack.json_file(Json::new(name.to_owned(), value));
+            }
+            _ => {
+                if name.ends_with("/sounds.json") {
+                    let (overlay, identifier) = parse_path(name);
+                    let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                        Some(value) => value,
+                        None => return,
+                    };
+                    match SoundDefinitions::from_json(overlay, identifier.namespace, &json_str) {
+                        Ok(value) => {
+                            pack.sound_definitions(value);
+                        }
+                        Err(e) => {
+                            let _ = logger.send(LogMessage {
+                                level: Error,
+                                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+                            });
+                            pack.unknown_file(ResourcePackFile::new(
+                                name.to_owned(),
+                                content.to_owned(),
+                            ));
+                        }
                     }
-                    Err(e) => {
-                        let _ = logger.send(LogMessage {
-                            level: Error,
-                            message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                        });
-                        pack.unknown_file(ResourcePackFile::new(
-                            name.to_owned(),
-                            content.to_owned(),
-                        ));
-                    }
+                } else {
+                    json_file(logger, pack, name, content);
                 }
             }
         }
     } else if name.ends_with(".mcmeta") {
-        match serde_json::from_slice(&content) {
-            Ok(value) => {
-                pack.json_file(Json::new(name.to_owned(), value));
-            }
-            Err(e) => {
-                let _ = logger.send(LogMessage {
-                    level: Error,
-                    message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
-                });
-                pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
-            }
-        }
-    } else if name.ends_with(".png") && crate::get_type(&name) == Some("textures") {
-        let (overlay, identifier) = crate::parse_path(&name);
+        json_file(logger, pack, name, content);
+    } else if name.ends_with(".png") && get_type(name) == Some("textures") {
+        let (overlay, identifier) = parse_path(name);
         pack.texture(Texture::new(overlay, identifier, content.to_owned()));
     } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
         pack.shader(Shader::new(
             name.to_owned(),
-            String::from_utf8(content.to_owned()).unwrap(),
+            match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                Some(value) => value,
+                None => return,
+            },
         ));
-    } else if name.ends_with(".ogg") && crate::get_type(&name) == Some("sounds") {
-        let (overlay, identifier) = crate::parse_path(&name);
+    } else if name.ends_with(".ogg") && get_type(name) == Some("sounds") {
+        let (overlay, identifier) = parse_path(name);
         pack.sound(Sound::new(overlay, identifier, content.to_owned()));
     } else {
         pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
     }
+}
+
+fn json_file(logger: &UnboundedSender<LogMessage>, pack: &Arc<ResourcePack>, name: &mut String, content: &mut Vec<u8>) {
+    match serde_json::from_slice(content) {
+        Ok(value) => {
+            pack.json_file(Json::new(name.to_owned(), value));
+        }
+        Err(e) => {
+            let _ = logger.send(LogMessage {
+                level: Error,
+                message: format!("Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}", name, e),
+            });
+            pack.unknown_file(ResourcePackFile::new(
+                name.to_owned(),
+                content.to_owned(),
+            ));
+        }
+    }
+}
+
+fn parse_utf8_or_unknown_file(
+    logger: &UnboundedSender<LogMessage>,
+    pack: &Arc<ResourcePack>,
+    name: &mut String,
+    content: &mut Vec<u8>,
+) -> Option<String> {
+    Some(match String::from_utf8(content.to_owned()) {
+        Ok(s) => s,
+        Err(e) => {
+            let _ = logger.send(LogMessage {
+                level: Error,
+                message: format!("Invalid UTF-8 in '{}': {}", name, e),
+            });
+
+            pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
+            return None;
+        }
+    })
 }

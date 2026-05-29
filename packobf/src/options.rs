@@ -81,6 +81,7 @@ pub enum ShaderCompression {
     MinifyAndObfuscate = 2,
 }
 
+#[allow(clippy::unwrap_used)]
 pub static ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
     iteration_count: NonZeroU64::new(25).unwrap(),
     iterations_without_improvement: NonZeroU64::new(7).unwrap(),

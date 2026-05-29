@@ -13,6 +13,7 @@ pub mod utils;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
+use crate::options::Options;
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
@@ -27,20 +28,21 @@ use crate::resource_pack::files::texture::Texture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
-use crate::resource_pack::resource_pack::ResourcePack;
+use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Info;
 use rayon::prelude::*;
-use std::io::{Cursor, Read};
+use std::io::{Cursor, Error, Read};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::watch;
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::watch::Sender;
 use zip::ZipArchive;
 
 pub fn process_zip(
     input_bytes: Vec<u8>,
-    options: &options::Options,
-    progress: watch::Sender<Progress>,
-    logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
+    options: &Options,
+    progress: Sender<Progress>,
+    logger: &UnboundedSender<LogMessage>,
     cache_file: &Option<String>,
 ) -> zip::result::ZipResult<Vec<u8>> {
     let _ = progress.send(Progress::Idle);
@@ -101,7 +103,7 @@ pub fn process_zip(
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
-        writer.add_file("assets\0", Vec::new().as_slice(), &options, &None)?;
+        writer.add_file("assets\0", Vec::new().as_slice(), options, &None)?;
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
@@ -121,76 +123,108 @@ pub fn process_zip(
     };
 
     items.par_iter_mut().for_each(|(name, item)| {
-        let _ = progress.send(Progress::Building {
-            current: name.to_string(),
-            index: counter.fetch_add(1, Ordering::Relaxed),
-            total,
-        });
-        if !name.starts_with("assets/") {
-            let mut parts = name.split('/');
-            let overlay = parts.next().unwrap().to_string();
-            if let Some(value) = mapping::get_mappings().overlay_mappings.get(&overlay) {
-                let rest = parts.collect::<Vec<_>>().join("/");
-                *name = format!("{}/{}", value, rest);
+        match add_item_to_archive(
+            options, &progress, logger, total, &writer, &counter, &cache, name, item,
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                let _ = logger.send(LogMessage {
+                    level: LogLevel::Error,
+                    message: format!("Failed to add item to archive: {}", e),
+                });
             }
         }
-        match item {
-            ResourcePackItem::Texture(t) => t.optimize(&options, &logger, &cache),
-            ResourcePackItem::Shader(s) => s.optimize(&options, &logger),
-            ResourcePackItem::Sound(s) => s.optimize(&logger, &cache),
-            _ => {}
-        }
-        match item {
-            ResourcePackItem::Texture(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
-            }
-            ResourcePackItem::Shader(o) => {
-                writer.add_file(name.as_str(), o.content.as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::Json(o) => writer.add_file(
-                name.as_str(),
-                o.content.to_string().as_bytes(),
-                &options,
-                &cache,
-            ),
-            ResourcePackItem::Model(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::Unknown(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
-            }
-            ResourcePackItem::BlockStateDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::FontDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::ItemDefinition(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::Sound(o) => {
-                writer.add_file(name.as_str(), o.bytes.as_slice(), &options, &cache)
-            }
-            ResourcePackItem::SoundDefinitions(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-            ResourcePackItem::Atlas(o) => {
-                writer.add_file(name.as_str(), o.to_string().as_bytes(), &options, &cache)
-            }
-        }
-        .expect("Failed to write file to zip archive");
     });
 
     writer.finish()?;
 
     if let Some(cache) = cache {
-        let _ = cache.save_to_file(cache_file.clone().unwrap().as_str());
+        #[allow(clippy::expect_used)] // Should never happen
+        let _ = cache.save_to_file(cache_file.clone().expect("cache_file is None").as_str());
     }
 
     let _ = progress.send(Progress::Done);
     #[cfg(feature = "profiling")]
     profiler::profiler::PROFILER.load().print();
     Ok(output.into_inner())
+}
+
+#[allow(clippy::too_many_arguments)] // Generated by my IDE it's fine
+fn add_item_to_archive(
+    options: &Options,
+    progress: &Sender<Progress>,
+    logger: &UnboundedSender<LogMessage>,
+    total: usize,
+    writer: &OptimizedZipWriter<&mut Cursor<Vec<u8>>>,
+    counter: &AtomicUsize,
+    cache: &Option<Cache>,
+    name: &mut String,
+    item: &mut ResourcePackItem,
+) -> Result<(), Error> {
+    let _ = progress.send(Progress::Building {
+        current: name.to_string(),
+        index: counter.fetch_add(1, Ordering::Relaxed),
+        total,
+    });
+    if !name.starts_with("assets/") {
+        let mut parts = name.split('/');
+        let overlay = match parts.next() {
+            Some(overlay) => overlay.to_string(),
+            None => {
+                let _ = logger.send(LogMessage {
+                    level: LogLevel::Error,
+                    message: format!("Invalid file path: {}", name),
+                });
+                return Ok(());
+            }
+        };
+        if let Some(value) = mapping::get_mappings().overlay_mappings.get(&overlay) {
+            let rest = parts.collect::<Vec<_>>().join("/");
+            *name = format!("{}/{}", value, rest);
+        }
+    }
+    match item {
+        ResourcePackItem::Texture(o) => {
+            o.optimize(options, logger, cache);
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::Shader(o) => {
+            o.optimize(options, logger);
+            writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
+        }
+        ResourcePackItem::Json(o) => writer.add_file(
+            name.as_str(),
+            o.content.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::Model(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Unknown(o) => {
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::BlockStateDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::FontDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::ItemDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Sound(o) => {
+            o.optimize(logger, cache);
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::SoundDefinitions(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Atlas(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+    }?;
+    Ok(())
 }
 
 fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
@@ -325,19 +359,17 @@ fn parse_path(path: &str) -> (String, Identifier) {
     let mut parts = path.split('/');
 
     // TODO: do something better
-    let overlay = if path.starts_with("assets/") {
-        "".to_string()
-    } else {
-        parts.next().unwrap().to_string()
-    };
-    parts.next().unwrap(); // skip assets
-    let namespace = parts.next().unwrap().to_string();
+    let overlay = parts.next().unwrap_or("").to_string();
 
-    parts.next().unwrap(); // skip type
+    parts.next(); // skip assets
+
+    let namespace = parts.next().unwrap_or("").to_string();
+
+    parts.next(); // skip type
 
     let rest = parts.collect::<Vec<_>>().join("/");
 
-    let (path, _) = rest.rsplit_once('.').or_else(|| Some(("", ""))).unwrap();
+    let (path, _) = rest.rsplit_once('.').unwrap_or(("", ""));
 
     (overlay, Identifier::new(namespace, path.to_string()))
 }

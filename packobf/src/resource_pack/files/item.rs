@@ -214,7 +214,7 @@ impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = serde_json::to_value(self).map_err(|_| std::fmt::Error)?;
         clean_json_numbers(&mut val);
-        write!(f, "{}", serde_json::to_string(&val).unwrap())
+        write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
     }
 }
 

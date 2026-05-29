@@ -8,7 +8,7 @@ impl Json {
     pub fn new(path: impl Into<String>, content: serde_json::Value) -> Self {
         Self {
             path: path.into(),
-            content: content.into(),
+            content,
         }
     }
 }

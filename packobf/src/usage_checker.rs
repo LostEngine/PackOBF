@@ -1,6 +1,6 @@
 use crate::minecraft::builtin_files;
 use crate::resource_pack::mapping;
-use crate::resource_pack::resource_pack::ResourcePack;
+use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Warning;
 use crate::{profile_scope, LogMessage};
 use dashmap::DashMap;
@@ -19,7 +19,7 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
             &pack.models,
             &counter.model_counter,
             |m| m.identifier.to_string(),
-            |id| builtin_files::is_in_models(id),
+            builtin_files::is_in_models,
         ));
         s.spawn(|_| check_category(
             logger,
@@ -27,7 +27,7 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
             &pack.textures,
             &counter.texture_counter,
             |t| t.identifier.to_string(),
-            |id| builtin_files::is_in_textures(id),
+            builtin_files::is_in_textures,
         ));
         s.spawn(|_| check_category(
             logger,
@@ -35,7 +35,7 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
             &pack.sounds,
             &counter.sound_counter,
             |s| s.identifier.to_string(),
-            |id| builtin_files::is_in_sounds(id),
+            builtin_files::is_in_sounds,
         ));
     });
 }

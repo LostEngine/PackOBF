@@ -87,7 +87,7 @@ impl std::fmt::Display for Atlas {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = serde_json::to_value(self).map_err(|_| std::fmt::Error)?;
         clean_json_numbers(&mut val);
-        write!(f, "{}", serde_json::to_string(&val).unwrap())
+        write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
     }
 }
 
@@ -113,7 +113,7 @@ impl Atlas {
         };
         format!(
             "{}assets/minecraft/atlases/{}.json",
-            prefix, self.atlas_type.to_string()
+            prefix, self.atlas_type
         )
     }
 
@@ -124,14 +124,14 @@ impl Atlas {
         for source in self.sources.iter() {
             match source {
                 Source::Single { resource, sprite } => {
-                    let name = sprite.as_ref().unwrap_or(&resource);
+                    let name = sprite.as_ref().unwrap_or(resource);
                     if name.namespace == texture_id.namespace && name.path == texture_id.path {
                         result = Some(resource.clone());
                         break;
                     }
                 }
-                Source::Directory { source, prefix } => {
-                    if texture_id.path.starts_with(prefix) {
+                Source::Directory { source, prefix }
+                    if texture_id.path.starts_with(prefix) => {
                         let remaining_path = &texture_id.path[prefix.len()..];
                         let resource_path = format!("{}{}", source, remaining_path);
 
@@ -141,7 +141,6 @@ impl Atlas {
                         });
                         break;
                     }
-                }
                 _ => {}
             }
         }

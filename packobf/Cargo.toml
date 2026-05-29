@@ -36,3 +36,8 @@ phf_codegen = "0.13.1"
 [features]
 default = []
 profiling = []
+
+[lints.clippy]
+unwrap_used = "warn"
+expect_used = "warn"
+panic = "warn"

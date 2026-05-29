@@ -15,19 +15,12 @@ use std::collections::HashMap;
 
 use crate::profile_scope;
 
+#[derive(Default)]
 pub struct Minifier {
     function_mapping: HashMap<String, String>,
     local_mapping: HashMap<String, String>,
 }
 
-impl Default for Minifier {
-    fn default() -> Self {
-        Self {
-            function_mapping: HashMap::new(),
-            local_mapping: HashMap::new(),
-        }
-    }
-}
 
 static FORMATTING_STATE: Lazy<FormattingState> = Lazy::new(|| {
     let mut formatting_state = FormattingState::default();
@@ -193,7 +186,7 @@ impl VisitorMut for Minifier {
                 let mut new_value = value.clone();
 
                 let mut all_maps: Vec<_> = self.local_mapping.iter().collect();
-                all_maps.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+                all_maps.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
 
                 for (old, short) in all_maps {
                     if let Ok(re) = regex::Regex::new(&format!(r"\b{}\b", old)) {
@@ -210,7 +203,7 @@ impl VisitorMut for Minifier {
 
                 let mut new_value = value.clone();
                 let mut all_maps: Vec<_> = self.local_mapping.iter().collect();
-                all_maps.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+                all_maps.sort_by_key(|b| std::cmp::Reverse(b.0.len()));
 
                 for (old, short) in all_maps {
                     if let Ok(re) = regex::Regex::new(&format!(r"\b{}\b", old)) {

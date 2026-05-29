@@ -7,7 +7,7 @@ use crc32fast::Hasher as Crc32Hasher;
 use dashmap::DashMap;
 use libdeflater::CompressionLvl;
 use sha2::{Digest, Sha256};
-use std::io::{self, Error, ErrorKind, Seek, Write};
+use std::io::{self, Error, Seek, Write};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug)]
@@ -39,7 +39,7 @@ pub struct OptimizedZipWriter<W: Write + Seek> {
 impl<W: Write + Seek> OptimizedZipWriter<W> {
     pub fn new(writer: W) -> Self {
         Self {
-            content_cache: DashMap::default().into(),
+            content_cache: DashMap::default(),
             inner: Arc::new(Mutex::new(Inner {
                 writer,
                 cd_entries: Vec::new(),
@@ -61,7 +61,9 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
 
         let existing_match = self.content_cache.get(&hash).map(|r| r.clone());
         if let Some(cached_data) = existing_match {
-            return self.record_entry(&mut self.inner.lock().unwrap(), filename, cached_data);
+            let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+
+            return self.record_entry(&mut inner, filename, cached_data);
         }
 
         // Calculate CRC32 (Required for Central Directory)
@@ -74,7 +76,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         let compressed_data: Vec<u8> = Self::compress(data, options, &hash, cache)?;
         let compressed_size = compressed_data.len() as u32;
 
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
         // Check the cache again after we get the lock
         let re_check = self.content_cache.get(&hash).map(|r| r.clone());
@@ -129,7 +131,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     ) -> Result<Vec<u8>, Error> {
         if let Some(cache) = cache {
             if let Some(bytes) = cache
-                .with_item(&hash, ItemType::Generic, |it| {
+                .with_item(hash, ItemType::Generic, |it| {
                     (it.compression as u8 >= options.compression.clone() as u8)
                         .then(|| it.data.clone())
                 })
@@ -140,12 +142,11 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         }
         Ok(match options.compression {
             Compression::Simplest => {
-                if cache.is_some() {}
                 let mut compressor = libdeflater::Compressor::default();
                 let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
                 let size = compressor
                     .deflate_compress(data, &mut out)
-                    .map_err(|_| Error::new(ErrorKind::Other, "Compression failed"))?;
+                    .map_err(|_| Error::other("Compression failed"))?;
                 out.truncate(size);
                 if let Some(cache) = cache {
                     cache.add_item_hash(
@@ -162,7 +163,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
                 let size = compressor
                     .deflate_compress(data, &mut out)
-                    .map_err(|_| Error::new(ErrorKind::Other, "Compression failed"))?;
+                    .map_err(|_| Error::other("Compression failed"))?;
                 out.truncate(size);
                 if let Some(cache) = cache {
                     cache.add_item_hash(
@@ -215,7 +216,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     /// This finalizes the ZIP file, making it valid for CD-parsing tools.
     pub fn finish(&self) -> io::Result<()> {
         profile_scope!("finish::zip");
-        let mut inner_guard = self.inner.lock().unwrap();
+        let mut inner_guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let Inner {
             ref mut writer,
             ref cd_entries,

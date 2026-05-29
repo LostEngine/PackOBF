@@ -14,7 +14,6 @@ Then copy the `files.txt` file into the right file in this folder. (e.g. `minecr
 
 *mcasset.cloud may generate JSON files named _list.json or _all.json. You will have to remove them manually if using `-name "*.json"`.*
 */
-
 // Minecraft 26.1
 pub fn is_in_models(input: &str) -> bool {
     MODELS.contains(input)

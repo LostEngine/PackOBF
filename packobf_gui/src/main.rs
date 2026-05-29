@@ -172,15 +172,14 @@ fn main() {
                 Event::WindowEvent {
                     event: WindowEvent::Resized(new_size),
                     ..
-                } => {
-                    if new_size.width > 0 && new_size.height > 0 {
+                }
+                    if new_size.width > 0 && new_size.height > 0 => {
                         surface.resize(
                             &context,
                             NonZeroU32::new(new_size.width).unwrap(),
                             NonZeroU32::new(new_size.height).unwrap(),
                         );
                     }
-                }
 
                 _ => {}
             }
@@ -245,14 +244,13 @@ fn draw_ui(
 
             ui.text("Resource pack file");
             ui.same_line();
-            if ui.button("Select file") {
-                if let Some(path) = FileDialog::new()
+            if ui.button("Select file")
+                && let Some(path) = FileDialog::new()
                     .add_filter("Zip", &["zip"])
                     .pick_file()
                 {
                     app.selected_file = path.display().to_string();
                 }
-            }
 
             ui.input_text("##selected_file", &mut app.selected_file).build();
 
@@ -260,23 +258,21 @@ fn draw_ui(
 
             ui.text("Cache file (Optional)");
             ui.same_line();
-            if ui.button("Import cache file") {
-                if let Some(path) = FileDialog::new()
+            if ui.button("Import cache file")
+                && let Some(path) = FileDialog::new()
                     .add_filter("Bin", &["bin"])
                     .pick_file()
                 {
                     app.cache_file_path = path.display().to_string();
                 }
-            }
             ui.same_line();
-            if ui.button("Create cache file") {
-                if let Some(path) = FileDialog::new()
+            if ui.button("Create cache file")
+                && let Some(path) = FileDialog::new()
                     .add_filter("Bin", &["bin"])
                     .save_file()
                 {
                     app.cache_file_path = path.display().to_string();
                 }
-            }
             ui.input_text("##cache_file", &mut app.cache_file_path).build();
 
             ui.separator();
@@ -391,8 +387,8 @@ fn draw_ui(
             ui.separator();
 
             if !app.processing {
-                if ui.button("Optimize") {
-                    if !app.selected_file.is_empty() {
+                if ui.button("Optimize")
+                    && !app.selected_file.is_empty() {
                         app.processing = true;
                         app.done = false;
                         app.logs.clear();
@@ -409,7 +405,6 @@ fn draw_ui(
                             run_packobf(file_to_process, cache, state_clone).await;
                         });
                     }
-                }
             } else {
                 ui.text("Processing...");
             }
@@ -417,16 +412,14 @@ fn draw_ui(
             if app.done {
                 ui.same_line();
 
-                if ui.button("Save file") {
-                    if let Some(bytes) = &app.output {
-                        if let Some(path) = FileDialog::new()
+                if ui.button("Save file")
+                    && let Some(bytes) = &app.output
+                        && let Some(path) = FileDialog::new()
                             .set_file_name("resourcepack-optimized.zip")
                             .save_file()
                         {
                             let _ = fs::write(path, bytes);
                         }
-                    }
-                }
             }
 
             ui.separator();

@@ -7,7 +7,7 @@ use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::texture::Texture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping::{self, Mapping};
-use crate::resource_pack::resource_pack::ResourcePack;
+use crate::resource_pack::pack::ResourcePack;
 use crate::{profile_scope, LogLevel, LogMessage};
 use serde_json::json;
 use std::collections::HashMap;
@@ -31,28 +31,25 @@ pub fn rename_files(
 fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
     profile_scope!("rename_files::overlays");
     let mut count = 0;
-    match pack.json_files.get_mut("pack.mcmeta") {
-        Some(mut mcmeta) => {
-            if let Some(entries) = mcmeta
-                .value_mut()
-                .content
-                .pointer_mut("/overlays/entries")
-                .and_then(|v| v.as_array_mut())
-            {
-                for entry in entries {
-                    if let Some(dir) = entry.get_mut("directory") {
-                        let current_name = dir.as_str().map(|s| s.to_string());
-                        if let Some(current_name) = current_name {
-                            let new_name = generate_short_name(count);
-                            *dir = json!(new_name.clone());
-                            mapping.insert(current_name, new_name);
-                            count += 1;
-                        }
+    if let Some(mut mcmeta) = pack.json_files.get_mut("pack.mcmeta") {
+        if let Some(entries) = mcmeta
+            .value_mut()
+            .content
+            .pointer_mut("/overlays/entries")
+            .and_then(|v| v.as_array_mut())
+        {
+            for entry in entries {
+                if let Some(dir) = entry.get_mut("directory") {
+                    let current_name = dir.as_str().map(|s| s.to_string());
+                    if let Some(current_name) = current_name {
+                        let new_name = generate_short_name(count);
+                        *dir = json!(new_name.clone());
+                        mapping.insert(current_name, new_name);
+                        count += 1;
                     }
                 }
             }
         }
-        None => {}
     }
 }
 
@@ -137,7 +134,7 @@ fn rename_textures(
 
     let mut per_folder_count: HashMap<String, usize> = HashMap::new();
     let font_textures = get_font_textures(pack);
-    for (_, (key, mut texture)) in textures.into_iter().enumerate() {
+    for (key, mut texture) in textures.into_iter() {
         let identifier = texture.identifier.to_string();
         if let Some(mapped) = mapping.get(&identifier) {
             texture.identifier.path = mapped.clone();
@@ -222,16 +219,13 @@ fn get_font_textures(pack: &ResourcePack) -> Vec<String> {
     let mut font_textures = Vec::new();
     for font in pack.fonts.iter() {
         for provider in font.providers.iter() {
-            match provider {
-                FontProvider::Bitmap { file, .. } => {
-                    let id = if file.0.namespace == "minecraft" {
-                        format!("{}", file.0.path)
-                    } else {
-                        format!("{}:{}", file.0.namespace, file.0.path)
-                    };
-                    font_textures.push(id);
-                }
-                _ => {}
+            if let FontProvider::Bitmap { file, .. } = provider {
+                let id = if file.0.namespace == "minecraft" {
+                    file.0.path.to_string()
+                } else {
+                    format!("{}:{}", file.0.namespace, file.0.path)
+                };
+                font_textures.push(id);
             }
         }
     }
@@ -240,11 +234,7 @@ fn get_font_textures(pack: &ResourcePack) -> Vec<String> {
 
 fn rebuild_atlas(pack: &ResourcePack) {
     for mut atlas in pack.atlases.iter_mut() {
-        atlas.sources.retain(|source| match source {
-            Source::Directory { .. } => false,
-            Source::Single { .. } => false,
-            _ => true,
-        });
+        atlas.sources.retain(|source| !matches!(source, Source::Directory { .. } | Source::Single { .. }));
         match atlas.atlas_type {
             AtlasType::Blocks => {
                 atlas.sources.push(Source::Directory {

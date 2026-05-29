@@ -21,7 +21,12 @@ pub fn modify_png_crcs(input: &[u8]) -> Result<Vec<u8>, &'static str> {
             break;
         }
 
-        let length_bytes: [u8; 4] = input[offset..offset + 4].try_into().unwrap();
+        let length_bytes = [
+            input[offset],
+            input[offset + 1],
+            input[offset + 2],
+            input[offset + 3],
+        ];
         let length = u32::from_be_bytes(length_bytes) as usize;
 
         let chunk_type = &input[offset + 4..offset + 8];
