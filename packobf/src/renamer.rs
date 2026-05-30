@@ -1,6 +1,6 @@
 use crate::minecraft::builtin_files;
 use crate::minecraft::builtin_files::AtlasType;
-use crate::resource_pack::files::atlas::Source;
+use crate::resource_pack::files::atlas::{Atlas, Source};
 use crate::resource_pack::files::font::FontProvider;
 use crate::resource_pack::files::model::Model;
 use crate::resource_pack::files::sound::Sound;
@@ -233,16 +233,24 @@ fn get_font_textures(pack: &ResourcePack) -> Vec<String> {
 }
 
 fn rebuild_atlas(pack: &ResourcePack) {
+    let mut item_atlas_exists = false;
+    let mut block_atlas_exists = false;
     for mut atlas in pack.atlases.iter_mut() {
         atlas.sources.retain(|source| !matches!(source, Source::Directory { .. } | Source::Single { .. }));
         match atlas.atlas_type {
             AtlasType::Blocks => {
+                if atlas.overlay == "" {
+                    block_atlas_exists = true;
+                }
                 atlas.sources.push(Source::Directory {
                     source: "b".to_string(),
                     prefix: "b/".to_string(),
                 });
             }
             AtlasType::Items => {
+                if atlas.overlay == "" {
+                    item_atlas_exists = true;
+                }
                 atlas.sources.push(Source::Directory {
                     source: "i".to_string(),
                     prefix: "i/".to_string(),
@@ -250,6 +258,28 @@ fn rebuild_atlas(pack: &ResourcePack) {
             }
             _ => {}
         }
+    }
+    if !block_atlas_exists {
+        let atlas = Atlas {
+            overlay: "".to_string(),
+            sources: vec![Source::Directory {
+                source: "b".to_string(),
+                prefix: "b/".to_string(),
+            }],
+            atlas_type: AtlasType::Blocks,
+        };
+        pack.atlases.insert(atlas.path(), atlas);
+    }
+    if !item_atlas_exists {
+        let atlas = Atlas {
+            overlay: "".to_string(),
+            sources: vec![Source::Directory {
+                source: "i".to_string(),
+                prefix: "i/".to_string(),
+            }],
+            atlas_type: AtlasType::Items,
+        };
+        pack.atlases.insert(atlas.path(), atlas);
     }
 }
 
