@@ -47,7 +47,7 @@ jobs:
             java-lib: librust.so
 
           # macOS Intel
-          - os: macos-13
+          - os: macos-latest
             target: x86_64-apple-darwin
             artifact: macos-x86_64
             cli: packobf_cli
