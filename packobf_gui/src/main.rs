@@ -100,7 +100,6 @@ struct OptimizationStats {
 
 #[derive(Debug)]
 enum PackObfError {
-    Io(std::io::Error),
     Packobf(String),
     Panic(String),
 }
@@ -108,7 +107,6 @@ enum PackObfError {
 impl Display for PackObfError {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
-            Self::Io(e) => write!(f, "IO error: {e}"),
             Self::Packobf(e) => write!(f, "Processing error: {e}"),
             Self::Panic(e) => write!(f, "Panic: {e}"),
         }
@@ -623,7 +621,6 @@ async fn run_packobf(path: String, cache: Option<String>, state: Arc<Mutex<AppSt
             });
 
             app.progress_text = match err {
-                PackObfError::Io(_) => "File error".into(),
                 PackObfError::Packobf(_) => "Processing error".into(),
                 PackObfError::Panic(_) => "Rust panic".into(),
             };
