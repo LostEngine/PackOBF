@@ -22,18 +22,61 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
-            cli: packobf_cli.exe
-            gui: packobf_gui.exe
-            java-lib: rust.dll
-          - os: macos-latest
-            cli: packobf_cli
-            gui: packobf_gui
-            java-lib: librust.dylib
+          # Linux x64 GNU
           - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
             cli: packobf_cli
             gui: packobf_gui
             java-lib: librust.so
+
+          # Linux x64 MUSL
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact: linux-x86_64-musl
+            cli: packobf_cli
+            gui: packobf_gui
+            java-lib: librust.so
+
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: linux-aarch64
+            cli: packobf_cli
+            gui: packobf_gui
+            java-lib: librust.so
+
+          # macOS Intel
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: macos-x86_64
+            cli: packobf_cli
+            gui: packobf_gui
+            java-lib: librust.dylib
+
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: macos-aarch64
+            cli: packobf_cli
+            gui: packobf_gui
+            java-lib: librust.dylib
+
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: windows-x86_64
+            cli: packobf_cli.exe
+            gui: packobf_gui.exe
+            java-lib: rust.dll
+
+          # Windows ARM64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact: windows-aarch64
+            cli: packobf_cli.exe
+            gui: packobf_gui.exe
+            java-lib: rust.dll
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -41,46 +84,58 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          targets: ${{ matrix.target }}
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
-      - uses: taiki-e/install-action@v2
+      - name: Install cargo-about
+        uses: taiki-e/install-action@v2
         with:
           tool: cargo-about
+      - name: Install cross (For aarch64-unknown-linux-gnu)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
       - name: Build
-        run: cargo build --release
+        run: |
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
       - name: Prepare License
         run: cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
       - name: Prepare CLI Executable
         # Always make sure files that are published contain the license files
         run: |
           rm -rf dist && mkdir -p dist
-          cp target/release/${{ matrix.cli }} dist/
+          cp target/${{ matrix.target }}/release/${{ matrix.cli }} dist/
           cp LICENSE.md dist/
       - name: Upload CLI Executable
         uses: actions/upload-artifact@v4
         with:
-          name: cli-${{ matrix.os }}
+          name: cli-${{ matrix.artifact }}
           path: dist/*
       - name: Prepare GUI Executable
         # Always make sure files that are published contain the license files
         run: |
           rm -rf dist && mkdir -p dist
-          cp target/release/${{ matrix.gui }} dist/
+          cp target/${{ matrix.target }}/release/${{ matrix.gui }} dist/
           cp LICENSE.md dist/
       - name: Upload GUI Executable
         uses: actions/upload-artifact@v4
         with:
-          name: gui-${{ matrix.os }}
+          name: gui-${{ matrix.artifact }}
           path: dist/*
       - name: Prepare Java Native Library
         run: |
           rm -rf dist && mkdir -p dist
-          cp target/release/${{ matrix.java-lib }} dist/
+          cp target/${{ matrix.target }}/release/${{ matrix.java-lib }} dist/
           cp LICENSE.md dist/
       - name: Upload Java Native Library
         uses: actions/upload-artifact@v4
         with:
-          name: java-lib-${{ matrix.os }}
+          name: java-lib-${{ matrix.artifact }}
           path: dist/*
   buildJava:
     name: Build Java Library
@@ -95,28 +150,53 @@ jobs:
           java-version: '21'
           distribution: 'graalvm'
           cache: 'gradle'
-      - name: Download Linux native
+      - name: Download Linux x64
         uses: actions/download-artifact@v4
         with:
-          name: java-lib-ubuntu-latest
-          path: artifacts/native/linux
-      - name: Download MacOS native
+          name: java-lib-linux-x86_64
+          path: artifacts/native/linux-x86_64
+
+      - name: Download Linux ARM64
         uses: actions/download-artifact@v4
         with:
-          name: java-lib-macos-latest
-          path: artifacts/native/macos
-      - name: Download Windows native
+          name: java-lib-linux-aarch64
+          path: artifacts/native/linux-aarch64
+
+      - name: Download macOS Intel
         uses: actions/download-artifact@v4
         with:
-          name: java-lib-windows-latest
-          path: artifacts/native/windows
+          name: java-lib-macos-x86_64
+          path: artifacts/native/macos-x86_64
+
+      - name: Download macOS ARM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-macos-aarch64
+          path: artifacts/native/macos-aarch64
+
+      - name: Download Windows x64
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-windows-x86_64
+          path: artifacts/native/windows-x86_64
+
+      - name: Download Windows ARM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-windows-aarch64
+          path: artifacts/native/windows-aarch64
       - name: Copy native libraries
         run: |
           mkdir -p java/build/external-natives
-          cp artifacts/native/linux/librust.so java/build/external-natives/
-          cp artifacts/native/macos/librust.dylib java/build/external-natives/
-          cp artifacts/native/windows/rust.dll java/build/external-natives/
-          cp artifacts/native/linux/LICENSE.md java/build/external-natives/
+          
+          cp -r artifacts/native/linux-x86_64 java/build/external-natives/
+          cp -r artifacts/native/linux-aarch64 java/build/external-natives/
+          
+          cp -r artifacts/native/macos-x86_64 java/build/external-natives/
+          cp -r artifacts/native/macos-aarch64 java/build/external-natives/
+          
+          cp -r artifacts/native/windows-x86_64 java/build/external-natives/
+          cp -r artifacts/native/windows-aarch64 java/build/external-natives/
       - name: Build
         run: |
           cd java
