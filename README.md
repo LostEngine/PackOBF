@@ -79,35 +79,45 @@ Adding the dependency (Gradle)
 ###### build.gradle.kts
 ```kts
 repositories {
-    maven {
-        url = uri("https://repo.misieur.me/repository")
-    }
+    maven("https://repo.misieur.me/repository")
 }
 
 dependencies {
-    compileOnly("dev.misieur:packobf:0.1.0")
+    compileOnly("dev.misieur:packobf:0.2.0")
 }
 ```
 
 Using PackOBF
 ```java
-byte[] bytes = /* The bytes of your built resource pack readable by any software */;
-PackObf.load(); // Makes sure PackOBF is loaded (required)
-try {
-    byte[] output = PackObf.optimizeZip( // Optimize resource pack and get the new byte array
+...
+import dev.misieur.packobf.PackOBF;
+import dev.misieur.packobf.options.Compression;
+import dev.misieur.packobf.options.Options;
+import dev.misieur.packobf.options.ShaderCompression;
+import dev.misieur.packobf.progress.*;
+...
+    byte[] bytes = /* The byte array of your built resource pack readable by any software */;
+    try {
+        byte[] output = PackOBF.optimizeZip( // Optimize resource pack and returns the new byte array
             bytes,
-            new PackObf.Options( // Configure PackOBF
-                    PackObf.Options.SIMPLEST,
-                    PackObf.Options.NONE,
+            new Options( // Configure PackOBF
+                    Compression.NORMAL,
+                    ShaderCompression.NONE,
                     true,
                     true,
                     true
             ),
-            (level, message) -> System.out.println(message), // Message logger
-            (state, current, total, currentString) -> System.out.println(state), // Progress logger (can be used in bossbar for example)
-            "path/to/cachefile.bin" // Nullable
+            (level, message) -> System.out.println(level.name().toUpperCase(Locale.ROOT) + ": " + message), // Message logger
+            progress -> { // Progress logger (can be used in bossbar for example)
+                switch (progress) {
+                    case IdleProgress p -> System.out.println("Initializing...");
+                    case ReadingZipProgress p -> System.out.println("Reading resource pack... " + p.current() + "/" + p.total());
+                    ...
+                }
+            },
+            Path.of("path/to/cachefile.bin") // Nullable
     );
-} catch (IOException e) { // PackOBF will throw a Java exception if it fails to optimize the resource pack
-    e.printStackTrace();
-}
+    } catch (IOException e) { // PackOBF will throw a Java exception if it fails to optimize the resource pack
+        e.printStackTrace();
+    }
 ```
