@@ -2871,7 +2871,7 @@ dependencies = [
 
 [[package]]
 name = "packobf"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "arc-swap",
  "byteorder",
@@ -2902,7 +2902,7 @@ dependencies = [
 
 [[package]]
 name = "packobf_cli"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "clap",
  "console",
@@ -2913,7 +2913,7 @@ dependencies = [
 
 [[package]]
 name = "packobf_gui"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "arboard",
  "glow",
@@ -3541,7 +3541,7 @@ dependencies = [
 
 [[package]]
 name = "rust"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jni",
  "packobf",

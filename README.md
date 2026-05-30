@@ -83,7 +83,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("dev.misieur:packobf:0.2.0")
+    compileOnly("dev.misieur:packobf:0.2.1")
 }
 ```
 
