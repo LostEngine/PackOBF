@@ -49,12 +49,21 @@ public class Native {
 
     static void load() throws IOException {
         if (enabled) return;
-        String libName = switch (OS.forName(System.getProperty("os.name"))) {
+        OS os = OS.forName(System.getProperty("os.name"));
+        Architecture arch = Architecture.current();
+
+        String libName = switch (os) {
             case WINDOWS -> "rust.dll";
             case LINUX -> "librust.so";
-            case MAC_OS -> "librust.dylib";
+            case MACOS -> "librust.dylib";
         };
-        String resourcePath = "/packobf-natives/" + libName;
+
+        String resourcePath = "/packobf-natives/"
+                + os.name().toLowerCase(Locale.ROOT)
+                + "-"
+                + arch.name().toLowerCase(Locale.ROOT)
+                + "/"
+                + libName;
         Path tempDir = Files.createTempDirectory("packobf-native-");
         Path extracted = Utils.extractFile(resourcePath, tempDir);
         extracted.toFile().setReadable(true);
@@ -89,14 +98,34 @@ public class Native {
     }
 
     enum OS {
-        WINDOWS, LINUX, MAC_OS;
+        WINDOWS, LINUX, MACOS;
 
         public static OS forName(String os) {
             String osName = os.toLowerCase(Locale.ROOT);
             if (osName.contains("windows")) return WINDOWS;
             if (osName.contains("linux")) return LINUX;
-            if (osName.contains("mac") || osName.contains("darwin") || osName.contains("osx")) return MAC_OS;
+            if (osName.contains("mac") || osName.contains("darwin") || osName.contains("osx")) return MACOS;
             throw new IllegalStateException("Unsupported OS: " + os);
+        }
+    }
+
+    enum Architecture {
+        X86_64,
+        AARCH64;
+
+        static Architecture current() {
+            String arch = System.getProperty("os.arch")
+                    .toLowerCase(Locale.ROOT);
+
+            if (arch.equals("amd64") || arch.equals("x86_64")) {
+                return X86_64;
+            }
+
+            if (arch.equals("aarch64") || arch.equals("arm64")) {
+                return AARCH64;
+            }
+
+            throw new IllegalStateException("Unsupported architecture: " + arch);
         }
     }
 
