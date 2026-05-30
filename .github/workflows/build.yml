@@ -92,7 +92,7 @@ jobs:
         with:
           tool: cargo-about
       - name: Install cross (For aarch64-unknown-linux-gnu)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        if: matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'x86_64-unknown-linux-musl'
         uses: taiki-e/install-action@v2
         with:
           tool: cross
@@ -104,7 +104,7 @@ jobs:
         run: cross build --release --target ${{ matrix.target }}
       - name: Build Linux x86_64 musl
         if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: cargo build --release --target ${{ matrix.target }} -p packobf_cli -p packobf_gui
+        run: cross build --release --target ${{ matrix.target }} -p packobf_cli -p packobf_gui
       - name: Prepare License
         run: cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
       - name: Prepare CLI Executable
