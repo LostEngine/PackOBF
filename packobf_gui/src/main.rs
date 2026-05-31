@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 use arboard::Clipboard;
 use glow::HasContext;
 use glutin::{
