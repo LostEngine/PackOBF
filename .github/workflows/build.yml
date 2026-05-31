@@ -12,9 +12,41 @@ on:
   workflow_dispatch:
 
 jobs:
+  license:
+    name: Generate License
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Cache LICENSE.md
+        id: cache-license
+        uses: actions/cache@v4
+        with:
+          path: LICENSE.md
+          key: license-${{ hashFiles('Cargo.lock', 'about.hbs', 'about.toml') }}
+
+      - name: Install cargo-about
+        if: steps.cache-license.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: Generate LICENSE.md
+        if: steps.cache-license.outputs.cache-hit != 'true'
+        run: |
+          cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
+
+      - name: Upload LICENSE.md
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-license
+          path: LICENSE.md
   build:
     name: Build (${{ matrix.artifact }})
     runs-on: ${{ matrix.os }}
+    needs: license
     defaults:
       run:
         shell: bash
@@ -105,8 +137,10 @@ jobs:
       - name: Build (linux-x86_64-musl)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: cross build --release --target ${{ matrix.target }} -p packobf_cli -p packobf_gui
-      - name: Prepare License
-        run: cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
+      - name: Download LICENSE.md
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-license
       - name: Prepare CLI Executable
         # Always make sure files that are published contain the license files
         run: |
