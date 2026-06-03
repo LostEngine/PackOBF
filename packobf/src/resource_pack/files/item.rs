@@ -1,6 +1,6 @@
 use crate::resource_pack::identifier::{Identifier, ModelId};
-use serde::{Deserialize, Serialize};
 use crate::utils::clean_json_numbers;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Item {
@@ -26,14 +26,22 @@ pub enum Model {
         model: ModelId,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tints: Vec<TintSource>,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
     },
     #[serde(rename = "composite", alias = "minecraft:composite")]
-    Composite { models: Vec<Model> },
+    Composite {
+        models: Vec<Model>,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
+    },
     #[serde(rename = "condition", alias = "minecraft:condition")]
     Condition {
         property: String,
         on_true: Box<Model>,
         on_false: Box<Model>,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
     },
@@ -43,6 +51,8 @@ pub enum Model {
         cases: Vec<SelectCase>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Model>>,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
     },
@@ -54,6 +64,8 @@ pub enum Model {
         entries: Vec<RangeEntry>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Model>>,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
     },
@@ -61,11 +73,46 @@ pub enum Model {
     Special {
         base: ModelId,
         model: SpecialModelData,
+        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        transformation: Option<Transformation>,
     },
     #[serde(rename = "empty", alias = "minecraft:empty")]
     Empty {},
-    #[serde(rename = "bundle/selected_item", alias = "minecraft:bundle/selected_item")]
+    #[serde(
+        rename = "bundle/selected_item",
+        alias = "minecraft:bundle/selected_item"
+    )]
     BundleSelectedItem {},
+}
+
+// TODO: Convert Object to list
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Transformation {
+    List { transformation: [f32; 16] },
+    Object { transformation: FullTransformation },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FullTransformation {
+    left_rotation: Quaternion,
+    right_rotation: Quaternion,
+    scale: [f32; 3],
+    translation: [f32; 3],
+}
+
+// TODO: Convert Object to list
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum Quaternion {
+    List { quaternion: [f32; 4] },
+    Object {
+        quaternion: FullQuaternion
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FullQuaternion {
+    axis: [f32; 3],
+    angle: f32,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -137,7 +184,10 @@ pub enum SpecialModelData {
         #[serde(default)]
         openness: f32,
     },
-    #[serde(rename = "copper_golem_statue", alias = "minecraft:copper_golem_statue")]
+    #[serde(
+        rename = "copper_golem_statue",
+        alias = "minecraft:copper_golem_statue"
+    )]
     CopperGolemStatue {
         texture: String, // with the ".png" suffix
         pose: String,
@@ -214,12 +264,15 @@ impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = serde_json::to_value(self).map_err(|_| std::fmt::Error)?;
         clean_json_numbers(&mut val);
-        write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(&val).map_err(|_| std::fmt::Error)?
+        )
     }
 }
 
 impl Item {
-
     pub fn from_json(
         overlay: impl Into<String>,
         identifier: Identifier,
