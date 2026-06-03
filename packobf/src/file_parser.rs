@@ -18,6 +18,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 pub fn parse_resource_pack_files(
     logger: &UnboundedSender<LogMessage>,
@@ -210,9 +211,13 @@ fn parse_resource_pack_file(
         }
     } else if name.ends_with(".mcmeta") {
         json_file(logger, pack, name, content);
-    } else if name.ends_with(".png") && get_type(name) == Some("textures") {
-        let (overlay, identifier) = parse_path(name);
-        pack.texture(Texture::new(overlay, identifier, content.to_owned()));
+    } else if name.ends_with(".png") {
+        if get_type(name) == Some("textures") {
+            let (overlay, identifier) = parse_path(name);
+            pack.texture(Texture::new(overlay, identifier, content.to_owned()));
+        } else {
+            pack.unknown_texture(UnknownTexture::new(name.as_str(), content.to_owned()))
+        }
     } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
         pack.shader(Shader::new(
             name.to_owned(),

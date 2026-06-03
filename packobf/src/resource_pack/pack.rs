@@ -10,12 +10,14 @@ use crate::resource_pack::files::json::Json;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 #[derive(Clone, Debug, Default)]
 pub struct ResourcePack {
     pub models: DashMap<String, Model>,
     pub json_files: DashMap<String, Json>,
     pub textures: DashMap<String, Texture>,
+    pub unknown_textures: DashMap<String, UnknownTexture>,
     pub shaders: DashMap<String, Shader>,
     pub unknown_files: DashMap<String, ResourcePackFile>,
     pub blockstates: DashMap<String, Blockstate>,
@@ -37,6 +39,10 @@ impl ResourcePack {
 
     pub fn texture(&self, texture: Texture) {
         self.textures.insert(texture.path(), texture);
+    }
+
+    pub fn unknown_texture(&self, unknown_texture: UnknownTexture) {
+        self.unknown_textures.insert(unknown_texture.path.clone(), unknown_texture);
     }
 
     pub fn shader(&self, shader: Shader) {

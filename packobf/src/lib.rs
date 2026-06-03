@@ -37,6 +37,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use zip::ZipArchive;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 pub fn process_zip(
     input_bytes: Vec<u8>,
@@ -186,7 +187,7 @@ fn add_item_to_archive(
     match item {
         ResourcePackItem::Texture(o) => {
             o.optimize(options, logger, cache);
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+            writer.add_file(name.as_str(), o.unknown_texture.bytes.as_slice(), options, cache)
         }
         ResourcePackItem::Shader(o) => {
             o.optimize(options, logger);
@@ -223,6 +224,9 @@ fn add_item_to_archive(
         ResourcePackItem::Atlas(o) => {
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
+        ResourcePackItem::UnknownTexture(o) => {
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
     }?;
     Ok(())
 }
@@ -233,6 +237,12 @@ fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
         (
             kv.key().clone(),
             ResourcePackItem::Texture(kv.value().clone()),
+        )
+    });
+    let unknown_texture_iter = pack.unknown_textures.par_iter().map(|kv| {
+        (
+            kv.key().clone(),
+            ResourcePackItem::UnknownTexture(kv.value().clone()),
         )
     });
     let shader_iter = pack.shaders.par_iter().map(|kv| {
@@ -295,6 +305,7 @@ fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
     });
 
     texture_iter
+        .chain(unknown_texture_iter)
         .chain(shader_iter)
         .chain(model_iter)
         .chain(json_iter)
@@ -329,6 +340,7 @@ pub enum Progress {
 #[derive(Clone, Debug)]
 enum ResourcePackItem {
     Texture(Texture),
+    UnknownTexture(UnknownTexture),
     Shader(Shader),
     Json(Json),
     Model(Model),
