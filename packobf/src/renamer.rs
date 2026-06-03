@@ -331,7 +331,7 @@ fn rename_models(
 }
 
 fn generate_short_name(mut id: usize) -> String {
-    let charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"; // We do not care about convention
+    let charset = "abcdefghijklmnopqrstuvwxyz0123456789_-";
     let base = charset.len();
     let bytes = charset.as_bytes();
 
