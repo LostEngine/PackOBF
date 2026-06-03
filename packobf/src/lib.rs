@@ -225,6 +225,7 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::UnknownTexture(o) => {
+            o.optimize(options, logger, cache);
             writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
         }
     }?;
