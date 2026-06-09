@@ -2193,7 +2193,6 @@ dependencies = [
  "cxx-qt-build",
  "cxx-qt-lib",
  "packobf",
- "qt-build-utils",
  "tokio",
 ]
 
