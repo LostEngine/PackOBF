@@ -15,6 +15,8 @@ pub struct Options {
     pub block_unzipping: bool,
     #[arg(long)]
     pub corrupt_png_files: bool,
+    #[arg(long)]
+    pub num_threads: Option<usize>,
 }
 
 #[derive(ValueEnum, Clone, Debug)]
@@ -32,6 +34,7 @@ impl Options {
             rename_files: false,
             block_unzipping: false,
             corrupt_png_files: false,
+            num_threads: None,
         }
     }
 
@@ -42,6 +45,7 @@ impl Options {
             rename_files: false,
             block_unzipping: false,
             corrupt_png_files: false,
+            num_threads: None,
         }
     }
 
@@ -52,6 +56,7 @@ impl Options {
             rename_files: true,
             block_unzipping: true,
             corrupt_png_files: true,
+            num_threads: None,
         }
     }
 

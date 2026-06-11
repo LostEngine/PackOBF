@@ -42,7 +42,8 @@ public class PackOBF {
                         options.shaderCompression().value,
                         options.renameFiles(),
                         options.blockUnzipping(),
-                        options.corruptPngFiles()
+                        options.corruptPngFiles(),
+                        options.numThreads() != null ? options.numThreads() : 0
                 ),
                 (level, message) -> logCallback.onLog(switch (level) {
                     case 0 -> LogLevel.INFO;

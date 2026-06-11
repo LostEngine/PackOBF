@@ -59,6 +59,10 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                 corrupt_png_files: env
                     .get_field(&options, jni_str!("corruptPngFiles"), jni_sig!("Z"))?
                     .z()?,
+                num_threads: Some(
+                    env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
+                        .i()? as usize,
+                ),
             }
         };
 
@@ -119,12 +123,17 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                                 total: t,
                             } => (1, c as i32, t as i32, None),
                             Progress::Parsing { current: s } => (2, 0, 0, Some(s)),
-                            Progress::Building {
+                            Progress::Optimizing {
                                 current: s,
                                 index: i,
                                 total: t,
                             } => (3, i as i32, t as i32, Some(s)),
-                            Progress::Done => (4, 0, 0, None),
+                            Progress::Building {
+                                current: s,
+                                index: i,
+                                total: t,
+                            } => (4, i as i32, t as i32, Some(s)),
+                            Progress::Done => (5, 0, 0, None),
                         };
 
                         let _ = env.with_local_frame(16, |env| {

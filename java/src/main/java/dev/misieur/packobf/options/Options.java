@@ -1,6 +1,8 @@
 package dev.misieur.packobf.options;
 
-public record Options(Compression compression, ShaderCompression shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles) {
+import dev.misieur.packobf.annotations.Nullable;
+
+public record Options(Compression compression, ShaderCompression shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles, @Nullable Integer numThreads) {
     public static Options simplest() {
         return new Options(
                 Compression.SIMPLEST,

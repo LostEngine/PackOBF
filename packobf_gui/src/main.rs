@@ -521,6 +521,7 @@ async fn run_packobf(path: String, cache: Option<String>, state: Arc<Mutex<AppSt
             rename_files: app.rename_files,
             block_unzipping: app.block_unzipping,
             corrupt_png_files: app.corrupt_png_files,
+            num_threads: None
         }
     };
 
@@ -545,6 +546,14 @@ async fn run_packobf(path: String, cache: Option<String>, state: Arc<Mutex<AppSt
 
                 Progress::Parsing { current } => {
                     format!("Parsing {}", current)
+                }
+
+                Progress::Optimizing {
+                    current,
+                    index,
+                    total,
+                } => {
+                    format!("Optimizing ({}/{}) {}", index, total, current)
                 }
 
                 Progress::Building {

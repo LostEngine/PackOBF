@@ -16,6 +16,7 @@ use crate::{get_type, parse_path, LogMessage, Progress};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use std::str::FromStr;
 use std::sync::Arc;
+use rayon::ThreadPool;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
@@ -25,9 +26,12 @@ pub fn parse_resource_pack_files(
     entries: &mut Vec<(String, Vec<u8>)>,
     progress: Sender<Progress>,
     pack: Arc<ResourcePack>,
+    thread_pool: &ThreadPool
 ) {
-    entries.par_iter_mut().for_each(move |(name, content)| {
-        parse_resource_pack_file(logger, &progress, &pack, name, content);
+    thread_pool.install(|| {
+        entries.par_iter_mut().for_each(move |(name, content)| {
+            parse_resource_pack_file(logger, &progress, &pack, name, content);
+        });
     });
 }
 

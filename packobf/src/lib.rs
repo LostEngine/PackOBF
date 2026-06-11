@@ -13,7 +13,7 @@ pub mod utils;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
-use crate::options::Options;
+use crate::options::{Options, ShaderCompression};
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
@@ -25,19 +25,21 @@ use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
 use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
 use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Info;
 use rayon::prelude::*;
-use std::io::{Cursor, Error, Read};
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use std::error::Error;
+use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use zip::ZipArchive;
-use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 pub fn process_zip(
     input_bytes: Vec<u8>,
@@ -45,7 +47,7 @@ pub fn process_zip(
     progress: Sender<Progress>,
     logger: &UnboundedSender<LogMessage>,
     cache_file: &Option<String>,
-) -> zip::result::ZipResult<Vec<u8>> {
+) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
     let _ = progress.send(Progress::Idle);
     #[cfg(feature = "profiling")]
     profiler::profiler::PROFILER.store(Arc::new(profiler::profiler::Profiler::new()));
@@ -80,11 +82,16 @@ pub fn process_zip(
     let id_usage_counter = IdUsageCounter::default();
     mapping::set_id_usage_counter(id_usage_counter);
 
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(options.num_threads.unwrap_or(0))
+        .build()?;
+
     file_parser::parse_resource_pack_files(
         logger,
         &mut entries,
         progress.clone(),
         Arc::clone(&pack),
+        &pool,
     );
 
     usage_checker::check_usage(logger, &pack);
@@ -95,7 +102,7 @@ pub fn process_zip(
     }
     mapping::set_mappings(mapping);
 
-    let mut items = collect_files(pack);
+    let mut items = collect_files(pack, &pool);
 
     let total = items.len();
     let mut output = Cursor::new(Vec::new());
@@ -123,18 +130,71 @@ pub fn process_zip(
         None
     };
 
-    items.par_iter_mut().for_each(|(name, item)| {
-        match add_item_to_archive(
-            options, &progress, logger, total, &writer, &counter, &cache, name, item,
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                let _ = logger.send(LogMessage {
-                    level: LogLevel::Error,
-                    message: format!("Failed to add item to archive: {}", e),
-                });
+    pool.install(|| {
+        let total_to_optimize = AtomicUsize::new(0);
+        let to_optimize: Vec<_> = items
+            .par_iter_mut()
+            .filter(|(_, item)| match item {
+                ResourcePackItem::Texture(_) => {
+                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
+                    true
+                }
+                ResourcePackItem::UnknownTexture(_) => {
+                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
+                    true
+                }
+                ResourcePackItem::Shader(_) => {
+                    if options.shader_compression != ShaderCompression::None {
+                        total_to_optimize.fetch_add(1, Ordering::Relaxed);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                ResourcePackItem::Sound(_) => {
+                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
+                    true
+                }
+                _ => false,
+            })
+            .collect();
+
+        let total_to_optimize = to_optimize.len();
+        to_optimize.into_par_iter().for_each(|(name, item)| {
+            let _ = progress.send(Progress::Optimizing {
+                current: name.to_string(),
+                index: counter.fetch_add(1, Ordering::Relaxed),
+                total: total_to_optimize,
+            });
+            match item {
+                ResourcePackItem::Texture(x) => {
+                    x.unknown_texture.optimize(options, logger, &cache);
+                }
+                ResourcePackItem::UnknownTexture(x) => {
+                    x.optimize(options, logger, &cache);
+                }
+                ResourcePackItem::Shader(x) => {
+                    x.optimize(options, logger);
+                }
+                ResourcePackItem::Sound(x) => {
+                    x.optimize(logger, &cache);
+                }
+                _ => {}
             }
-        }
+        });
+        items.par_iter_mut().for_each(|(name, item)| {
+            match add_item_to_archive(
+                options, &progress, logger, total, &writer, &counter, &cache, name, item,
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    let _ = logger.send(LogMessage {
+                        level: LogLevel::Error,
+                        message: format!("Failed to add item to archive: {}", e),
+                    });
+                }
+            }
+        });
     });
 
     writer.finish()?;
@@ -161,7 +221,7 @@ fn add_item_to_archive(
     cache: &Option<Cache>,
     name: &mut String,
     item: &mut ResourcePackItem,
-) -> Result<(), Error> {
+) -> Result<(), Box<dyn Error>> {
     let _ = progress.send(Progress::Building {
         current: name.to_string(),
         index: counter.fetch_add(1, Ordering::Relaxed),
@@ -185,10 +245,12 @@ fn add_item_to_archive(
         }
     }
     match item {
-        ResourcePackItem::Texture(o) => {
-            o.optimize(options, logger, cache);
-            writer.add_file(name.as_str(), o.unknown_texture.bytes.as_slice(), options, cache)
-        }
+        ResourcePackItem::Texture(o) => writer.add_file(
+            name.as_str(),
+            o.unknown_texture.bytes.as_slice(),
+            options,
+            cache,
+        ),
         ResourcePackItem::Shader(o) => {
             o.optimize(options, logger);
             writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
@@ -215,7 +277,6 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::Sound(o) => {
-            o.optimize(logger, cache);
             writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
         }
         ResourcePackItem::SoundDefinitions(o) => {
@@ -225,99 +286,103 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::UnknownTexture(o) => {
-            o.optimize(options, logger, cache);
             writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
         }
     }?;
     Ok(())
 }
 
-fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
+fn collect_files(
+    pack: Arc<ResourcePack>,
+    thread_pool: &ThreadPool,
+) -> Vec<(String, ResourcePackItem)> {
     profile_scope!("collect_files");
-    let texture_iter = pack.textures.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Texture(kv.value().clone()),
-        )
-    });
-    let unknown_texture_iter = pack.unknown_textures.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::UnknownTexture(kv.value().clone()),
-        )
-    });
-    let shader_iter = pack.shaders.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Shader(kv.value().clone()),
-        )
-    });
-    let model_iter = pack.models.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Model(kv.value().clone()),
-        )
-    });
-    let json_iter = pack
-        .json_files
-        .par_iter()
-        .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone())));
-    let unknown_iter = pack.unknown_files.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Unknown(kv.value().clone()),
-        )
-    });
-    let blockstate_iter = pack.blockstates.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::BlockStateDefinition(kv.value().clone()),
-        )
-    });
-    let font_iter = pack.fonts.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::FontDefinition(kv.value().clone()),
-        )
-    });
-    let item_iter = pack.items.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::ItemDefinition(kv.value().clone()),
-        )
-    });
-    let sound_iter = pack.sounds.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Sound(kv.value().clone()),
-        )
-    });
-    let sound_definitions_iter = pack.sound_definitions.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::SoundDefinitions(kv.value().clone()),
-        )
-    });
-    let atlas_iter = pack.atlases.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Atlas(kv.value().clone()),
-        )
-    });
+    thread_pool.install(|| {
+        let texture_iter = pack.textures.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Texture(kv.value().clone()),
+            )
+        });
+        let unknown_texture_iter = pack.unknown_textures.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::UnknownTexture(kv.value().clone()),
+            )
+        });
+        let shader_iter = pack.shaders.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Shader(kv.value().clone()),
+            )
+        });
+        let model_iter = pack.models.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Model(kv.value().clone()),
+            )
+        });
+        let json_iter = pack
+            .json_files
+            .par_iter()
+            .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone())));
+        let unknown_iter = pack.unknown_files.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Unknown(kv.value().clone()),
+            )
+        });
+        let blockstate_iter = pack.blockstates.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::BlockStateDefinition(kv.value().clone()),
+            )
+        });
+        let font_iter = pack.fonts.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::FontDefinition(kv.value().clone()),
+            )
+        });
+        let item_iter = pack.items.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::ItemDefinition(kv.value().clone()),
+            )
+        });
+        let sound_iter = pack.sounds.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Sound(kv.value().clone()),
+            )
+        });
+        let sound_definitions_iter = pack.sound_definitions.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::SoundDefinitions(kv.value().clone()),
+            )
+        });
+        let atlas_iter = pack.atlases.par_iter().map(|kv| {
+            (
+                kv.key().clone(),
+                ResourcePackItem::Atlas(kv.value().clone()),
+            )
+        });
 
-    texture_iter
-        .chain(unknown_texture_iter)
-        .chain(shader_iter)
-        .chain(model_iter)
-        .chain(json_iter)
-        .chain(unknown_iter)
-        .chain(blockstate_iter)
-        .chain(font_iter)
-        .chain(item_iter)
-        .chain(sound_iter)
-        .chain(sound_definitions_iter)
-        .chain(atlas_iter)
-        .collect()
+        texture_iter
+            .chain(unknown_texture_iter)
+            .chain(shader_iter)
+            .chain(model_iter)
+            .chain(json_iter)
+            .chain(unknown_iter)
+            .chain(blockstate_iter)
+            .chain(font_iter)
+            .chain(item_iter)
+            .chain(sound_iter)
+            .chain(sound_definitions_iter)
+            .chain(atlas_iter)
+            .collect()
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -329,6 +394,11 @@ pub enum Progress {
     },
     Parsing {
         current: String,
+    },
+    Optimizing {
+        current: String,
+        index: usize,
+        total: usize,
     },
     Building {
         current: String,
