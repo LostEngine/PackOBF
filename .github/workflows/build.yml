@@ -55,7 +55,7 @@ jobs:
       matrix:
         include:
           # Linux x64 GNU
-          - os: ubuntu-latest
+          - os: ubuntu-22.04 # using an older version of Ubuntu for linuxdeployqt
             target: x86_64-unknown-linux-gnu
             artifact: linux-x86_64
             cli: packobf_cli
@@ -73,7 +73,7 @@ jobs:
             qt-arch: ""
 
           # Linux ARM64
-          - os: ubuntu-latest
+          - os: ubuntu-22.04 # using an older version of Ubuntu for linuxdeployqt
             target: aarch64-unknown-linux-gnu
             artifact: linux-aarch64
             cli: packobf_cli
@@ -143,7 +143,7 @@ jobs:
           tool: cross
 
       - name: Build
-        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl'
+        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' && matrix.target != 'aarch64-pc-windows-msvc'
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Build (linux-aarch64)
@@ -153,6 +153,10 @@ jobs:
       - name: Build (linux-x86_64-musl)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: cross build --release --target ${{ matrix.target }} -p packobf_cli
+
+      - name: Build (aarch64-pc-windows-msvc)
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        run: cargo build --release --target ${{ matrix.target }} -p packobf_cli -p rust
 
       - name: Download LICENSE.md
         uses: actions/download-artifact@v4
