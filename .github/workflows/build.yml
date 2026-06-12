@@ -61,7 +61,7 @@ jobs:
             cli: packobf_cli
             gui: packobf_gui
             java-lib: librust.so
-            qt-arch: gcc_64
+            qt-arch: linux_gcc_64
 
           # Linux x64 MUSL
           - os: ubuntu-latest
@@ -113,9 +113,9 @@ jobs:
             target: aarch64-pc-windows-msvc
             artifact: windows-aarch64
             cli: packobf_cli.exe
-            gui: packobf_gui.exe
+            gui: ""
             java-lib: rust.dll
-            qt-arch: win64_msvc2022_arm64_cross_compiled
+            qt-arch: ""
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
