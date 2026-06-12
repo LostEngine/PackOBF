@@ -184,6 +184,9 @@ jobs:
         if: runner.os == 'Windows' && matrix.gui != ''
         run: |
           windeployqt --qmldir packobf_gui dist/${{ matrix.gui }}
+          
+          cp /c/Windows/System32/msvcp140.dll dist/
+          cp /c/Windows/System32/vcruntime140.dll dist/
 
       - name: Deploy Qt Dependencies (macOS)
         if: runner.os == 'macOS' && matrix.gui != ''
