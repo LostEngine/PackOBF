@@ -187,6 +187,9 @@ jobs:
           
           cp /c/Windows/System32/msvcp140.dll dist/
           cp /c/Windows/System32/vcruntime140.dll dist/
+          cp /c/Windows/System32/msvcp140_1.dll dist/
+          cp /c/Windows/System32/msvcp140_2.dll dist/
+          cp /c/Windows/System32/vcruntime140_1.dll dist/
 
       - name: Deploy Qt Dependencies (macOS)
         if: runner.os == 'macOS' && matrix.gui != ''
