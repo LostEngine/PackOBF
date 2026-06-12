@@ -6,11 +6,6 @@ use cxx_qt::casting::Upcast;
 use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QQmlEngine, QUrl};
 use std::pin::Pin;
 fn main() {
-    unsafe {
-        #[cfg(target_os = "linux")]
-        std::env::set_var("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
-    }
-
     let mut app = QGuiApplication::new();
     let mut engine = QQmlApplicationEngine::new();
 
