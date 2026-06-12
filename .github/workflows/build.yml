@@ -213,6 +213,9 @@ jobs:
         run: |
           wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
+          
+          # Remove unused SQL drivers that cause ldd failures
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/sqldrivers
 
           cat <<EOF > dist/packobf_gui.desktop
           [Desktop Entry]
