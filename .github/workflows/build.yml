@@ -189,7 +189,7 @@ jobs:
       - name: Deploy Qt Dependencies (Windows)
         if: runner.os == 'Windows' && matrix.gui != ''
         run: |
-          windeployqt --qmldir packobf_gui dist/${{ matrix.gui }}
+          windeployqt --qmldir packobf_gui --no-translations --no-opengl-sw --no-system-d3d-compiler --no-compiler-runtime dist/${{ matrix.gui }}
           
           cp /c/Windows/System32/msvcp140.dll dist/
           cp /c/Windows/System32/vcruntime140.dll dist/
@@ -230,8 +230,9 @@ jobs:
           export APPIMAGE_EXTRACT_AND_RUN=1
           ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui
 
-          mv *.AppImage dist/ 2>/dev/null || true
-          rm -f dist/packobf_gui.desktop dist/packobf_gui.png
+          # The AppImage will already contain the license file
+          rm -rf dist && mkdir -p dist
+          mv *.AppImage dist/packobf-gui-${{ matrix.artifact }} 2>/dev/null || true
 
       - name: Upload GUI Executable
         if: matrix.gui != ''
