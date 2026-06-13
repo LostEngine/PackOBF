@@ -197,6 +197,9 @@ jobs:
           cp /c/Windows/System32/msvcp140_2.dll dist/
           cp /c/Windows/System32/vcruntime140_1.dll dist/
 
+          # Removing all unused DLLs
+          rm -rf dist/generic dist/iconengines dist/imageformats dist/networkinformation dist/qmltooling dist/tls dist/Qt6LabsFolderListModel.dll dist/Qt6QuickControls2BasicStyleImpl.dll dist/Qt6QuickControls2FluentWinUI3StyleImpl.dll dist/Qt6QuickControls2Imagine.dll dist/Qt6QuickControls2ImagineStyleImpl.dll dist/Qt6QuickControls2Material.dll dist/Qt6QuickControls2MaterialStyleImpl.dll dist/Qt6QuickControls2Universal.dll dist/Qt6QuickControls2UniversalStyleImpl.dll dist/Qt6QuickControls2WindowsStyleImpl.dll dist/Qt6QuickEffects.dll dist/Qt6QuickShapes.dll dist/Qt6Svg.dll
+
       - name: Deploy Qt Dependencies (macOS)
         if: runner.os == 'macOS' && matrix.gui != ''
         run: |
@@ -232,7 +235,7 @@ jobs:
 
           # The AppImage will already contain the license file
           rm -rf dist && mkdir -p dist
-          mv *.AppImage dist/packobf-gui-${{ matrix.artifact }} 2>/dev/null || true
+          mv *.AppImage dist/packobf-gui-${{ matrix.artifact }}
 
       - name: Upload GUI Executable
         if: matrix.gui != ''
