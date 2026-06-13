@@ -235,7 +235,7 @@ jobs:
 
           # The AppImage will already contain the license file
           rm -rf dist && mkdir -p dist
-          mv *.AppImage dist/packobf-gui-${{ matrix.artifact }}.AppImage
+          mv packobf-*.AppImage dist/packobf-gui-${{ matrix.artifact }}.AppImage
 
       - name: Upload GUI Executable
         if: matrix.gui != ''
