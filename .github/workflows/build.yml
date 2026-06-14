@@ -207,7 +207,7 @@ jobs:
           cp dist/${{ matrix.gui }} dist/packobf_gui.app/Contents/MacOS/
 
           cd dist
-          macdeployqt packobf_gui.app -dmg -qmldir=../packobf_gui -exclude-libs=iconengines,imageformats,networkinformation,qmltooling,tls
+          macdeployqt packobf_gui.app -dmg -qmldir=../packobf_gui
           cd ..
 
           rm -rf dist/packobf_gui.app
