@@ -28,15 +28,17 @@ ApplicationWindow {
 
     Connections {
         target: appController
+
         function onLogsBatch(batchStr) {
             let items = batchStr.split('\x1E');
             for (let i = 0; i < items.length - 1; i++) {
                 let item = items[i];
                 let level = parseInt(item.charAt(0));
                 let msg = item.substring(1);
-                logsModel.append({ "level": level, "message": msg });
+                logsModel.append({"level": level, "message": msg});
             }
         }
+
         function onLogsCleared() {
             logsModel.clear();
         }
@@ -92,10 +94,18 @@ ApplicationWindow {
         onClosed: appController.show_stats_popup = false
 
         ColumnLayout {
-            Label { text: "Time taken: " + appController.stats_time }
-            Label { text: "Input size: " + appController.stats_input }
-            Label { text: "Output size: " + appController.stats_output }
-            Label { text: "Saved: " + appController.stats_saved }
+            Label {
+                text: "Time taken: " + appController.stats_time
+            }
+            Label {
+                text: "Input size: " + appController.stats_input
+            }
+            Label {
+                text: "Output size: " + appController.stats_output
+            }
+            Label {
+                text: "Saved: " + appController.stats_saved
+            }
         }
     }
 
@@ -110,10 +120,14 @@ ApplicationWindow {
             color: sysPalette.windowText
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
-            Label { text: "Resource pack file"; Layout.preferredWidth: 150 }
+            Label {
+                text: "Resource pack file"; Layout.preferredWidth: 150
+            }
             Button {
                 text: "Select file"
                 onClicked: fileDialog.open()
@@ -125,10 +139,14 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
-            Label { text: "Cache file (Optional)"; Layout.preferredWidth: 150 }
+            Label {
+                text: "Cache file (Optional)"; Layout.preferredWidth: 150
+            }
             Button {
                 text: "Import cache file"
                 onClicked: cacheImportDialog.open()
@@ -144,7 +162,9 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
             Label {
@@ -152,7 +172,9 @@ ApplicationWindow {
                 Layout.preferredWidth: 150
                 ToolTip.visible: ma1.containsMouse
                 ToolTip.text: "Global compression level for the resource pack."
-                MouseArea { id: ma1; anchors.fill: parent; hoverEnabled: true }
+                MouseArea {
+                    id: ma1; anchors.fill: parent; hoverEnabled: true
+                }
             }
             ComboBox {
                 model: ["Simplest", "Normal", "Max"]
@@ -162,7 +184,9 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
             Label {
@@ -170,7 +194,9 @@ ApplicationWindow {
                 Layout.preferredWidth: 250
                 ToolTip.visible: ma2.containsMouse
                 ToolTip.text: "Parses GLSL core shaders to minify and obfuscate them. (Experimental)"
-                MouseArea { id: ma2; anchors.fill: parent; hoverEnabled: true }
+                MouseArea {
+                    id: ma2; anchors.fill: parent; hoverEnabled: true
+                }
             }
             ComboBox {
                 model: ["None", "Minify", "Minify and obfuscate"]
@@ -180,7 +206,9 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
             spacing: 20
@@ -190,7 +218,9 @@ ApplicationWindow {
                 onCheckedChanged: appController.rename_files = checked
                 ToolTip.visible: ma3.containsMouse
                 ToolTip.text: "Renames textures, models, and sounds to shorter names while keeping the resource pack working."
-                MouseArea { id: ma3; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                MouseArea {
+                    id: ma3; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
+                }
             }
             CheckBox {
                 text: "Block resource pack unzipping"
@@ -198,7 +228,9 @@ ApplicationWindow {
                 onCheckedChanged: appController.block_unzipping = checked
                 ToolTip.visible: ma4.containsMouse
                 ToolTip.text: "Adds some bytes to the resource pack to prevent files from being extracted on a file system."
-                MouseArea { id: ma4; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                MouseArea {
+                    id: ma4; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
+                }
             }
             CheckBox {
                 text: "Corrupt PNG files"
@@ -206,11 +238,15 @@ ApplicationWindow {
                 onCheckedChanged: appController.corrupt_png_files = checked
                 ToolTip.visible: ma5.containsMouse
                 ToolTip.text: "Corrupts PNG files in a way that makes them unreadable for most software except for Minecraft."
-                MouseArea { id: ma5; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                MouseArea {
+                    id: ma5; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
+                }
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
             Button {
@@ -221,6 +257,7 @@ ApplicationWindow {
             Label {
                 text: "Processing..."
                 visible: appController.processing
+                color: sysPalette.windowText
             }
             Button {
                 text: "Save file"
@@ -229,17 +266,27 @@ ApplicationWindow {
             }
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         Label {
             text: "Status: " + appController.progress_text
             Layout.fillWidth: true
+            color: sysPalette.windowText
         }
 
-        MenuSeparator { Layout.fillWidth: true }
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
 
         RowLayout {
-            Label { text: "Logs"; font.bold: true; Layout.fillWidth: true }
+            Label {
+                text: "Logs";
+                font.bold: true;
+                Layout.fillWidth: true;
+                color: sysPalette.windowText
+            }
             CheckBox {
                 text: "Info"
                 checked: appController.show_info
@@ -272,7 +319,6 @@ ApplicationWindow {
             Layout.fillHeight: true
 
             color: sysPalette.base
-
             border.color: sysPalette.mid
             border.width: 1
             radius: 4
@@ -299,7 +345,7 @@ ApplicationWindow {
                     acceptedButtons: Qt.NoButton
                     onWheel: (wheel) => {
                         wheel.accepted = false; // allow ListView to actually scroll
-                        Qt.callLater(function() {
+                        Qt.callLater(function () {
                             logListView.shouldAutoScroll = logListView.atYEnd;
                         });
                     }
@@ -314,7 +360,7 @@ ApplicationWindow {
 
                 onCountChanged: {
                     if (shouldAutoScroll) {
-                        Qt.callLater(function() {
+                        Qt.callLater(function () {
                             logListView.positionViewAtEnd();
                         });
                     }
