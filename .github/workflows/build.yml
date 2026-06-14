@@ -219,8 +219,15 @@ jobs:
           wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
           
-          # Remove unused SQL drivers that cause ldd failures
+          # Cleanup Qt installation
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/printsupport
           rm -rf ../Qt/6.8.3/gcc_64/plugins/sqldrivers
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/help
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/designer
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/qmltooling
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/qmlls
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/qmllint
+          rm -rf ../Qt/6.8.3/gcc_64/plugins/platformthemes/libqgtk3.so
 
           cat <<EOF > dist/packobf_gui.desktop
           [Desktop Entry]
@@ -233,7 +240,7 @@ jobs:
           touch dist/packobf_gui.png
 
           export APPIMAGE_EXTRACT_AND_RUN=1
-          ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui -no-translations -exclude-libs=iconengines,imageformats,networkinformation,qmltooling,tls
+          ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui -no-translations -exclude-libs=networkinformation,qmltooling,tls -extra-plugins=platformthemes/libqxdgdesktopportal.so
 
           # The AppImage will already contain the license file
           rm -rf dist && mkdir -p dist
