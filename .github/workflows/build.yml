@@ -206,7 +206,9 @@ jobs:
           mkdir -p dist/packobf_gui.app/Contents/MacOS
           cp dist/${{ matrix.gui }} dist/packobf_gui.app/Contents/MacOS/
 
-          macdeployqt dist/packobf_gui.app -dmg -qmldir=packobf_gui
+          cd dist
+          macdeployqt packobf_gui.app -dmg -qmldir=../packobf_gui -exclude-libs=iconengines,imageformats,networkinformation,qmltooling,tls
+          cd ..
 
           rm -rf dist/packobf_gui.app
           rm -f dist/${{ matrix.gui }}
@@ -231,7 +233,7 @@ jobs:
           touch dist/packobf_gui.png
 
           export APPIMAGE_EXTRACT_AND_RUN=1
-          ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui -no-translations
+          ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui -no-translations -exclude-libs=iconengines,imageformats,networkinformation,qmltooling,tls
 
           # The AppImage will already contain the license file
           rm -rf dist && mkdir -p dist
