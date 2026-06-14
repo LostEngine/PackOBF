@@ -11,6 +11,13 @@ ApplicationWindow {
     height: 720
     title: qsTr("packobf")
 
+    SystemPalette {
+        id: sysPalette
+        colorGroup: SystemPalette.Active
+    }
+
+    color: sysPalette.window
+
     AppController {
         id: appController
     }
@@ -100,6 +107,7 @@ ApplicationWindow {
         Label {
             text: qsTr("An open-source Minecraft: Java Edition resource pack minimizer, obfuscator and checker.")
             Layout.fillWidth: true
+            color: sysPalette.windowText
         }
 
         MenuSeparator { Layout.fillWidth: true }
@@ -262,7 +270,11 @@ ApplicationWindow {
         Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
-            color: "#1e1e1e"
+
+            color: sysPalette.base
+
+            border.color: sysPalette.mid
+            border.width: 1
             radius: 4
             clip: true
 
@@ -331,7 +343,7 @@ ApplicationWindow {
                             if (model.level === 0) return "#0073e6";
                             if (model.level === 1) return "#d98200";
                             if (model.level === 2) return "#d90000";
-                            return "white";
+                            return sysPalette.text;
                         }
                         font.bold: true
                         wrapMode: Text.Wrap
