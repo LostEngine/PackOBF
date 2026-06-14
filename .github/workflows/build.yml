@@ -203,14 +203,17 @@ jobs:
       - name: Deploy Qt Dependencies (macOS)
         if: runner.os == 'macOS' && matrix.gui != ''
         run: |
-          mkdir -p dist/packobf_gui.app/Contents/MacOS
-          cp dist/${{ matrix.gui }} dist/packobf_gui.app/Contents/MacOS/
+          mkdir -p dist/PackOBF\ GUI.app/Contents/MacOS
+          cp dist/${{ matrix.gui }} dist/PackOBF\ GUI.app/Contents/MacOS/PackOBF\ GUI
+          
+          mkdir -p dist/PackOBF\ GUI.app/Contents/Resources
+          mv dist/LICENSE.md dist/PackOBF\ GUI.app/Contents/Resources/
 
           cd dist
-          macdeployqt packobf_gui.app -dmg -qmldir=../packobf_gui
+          macdeployqt PackOBF\ GUI.app -dmg -qmldir=../packobf_gui
           cd ..
 
-          rm -rf dist/packobf_gui.app
+          rm -rf dist/PackOBF\ GUI.app
           rm -f dist/${{ matrix.gui }}
 
       - name: Deploy Qt Dependencies (Linux)
