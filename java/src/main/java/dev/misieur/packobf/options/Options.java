@@ -9,7 +9,8 @@ public record Options(Compression compression, ShaderCompression shaderCompressi
                 ShaderCompression.NONE,
                 false,
                 false,
-                false
+                false,
+                null
         );
     }
 
@@ -19,7 +20,8 @@ public record Options(Compression compression, ShaderCompression shaderCompressi
                 ShaderCompression.NONE,
                 false,
                 false,
-                false
+                false,
+                null
         );
     }
 
@@ -30,7 +32,8 @@ public record Options(Compression compression, ShaderCompression shaderCompressi
                 ShaderCompression.MINIFY_AND_OBFUSCATE,
                 true,
                 true,
-                true
+                true,
+                null
         );
     }
 }

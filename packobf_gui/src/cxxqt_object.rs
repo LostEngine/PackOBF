@@ -203,6 +203,7 @@ impl qobject::AppController {
             rename_files: *self.rename_files(),
             block_unzipping: *self.block_unzipping(),
             corrupt_png_files: *self.corrupt_png_files(),
+            num_threads: None,
         };
 
         let qt_thread = self.qt_thread();
@@ -241,6 +242,7 @@ impl qobject::AppController {
                         Progress::Idle => "Idle".to_string(),
                         Progress::ReadingZip { current, total } => format!("Reading ZIP ({}/{})", current, total),
                         Progress::Parsing { current } => format!("Parsing {}", current),
+                        Progress::Optimizing { current, index, total } => format!("Optimizing ({}/{}) {}", index, total, current),
                         Progress::Building { current, index, total } => format!("Building ({}/{}) {}", index, total, current),
                         Progress::Done => "Done".to_string(),
                     };
