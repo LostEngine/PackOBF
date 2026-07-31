@@ -31,8 +31,8 @@ impl Texture {
         );
         let unknown_texture = UnknownTexture::new(path, bytes);
         Self {
-            overlay: overlay.into(),
-            identifier: identifier.into(),
+            overlay,
+            identifier,
             unknown_texture,
         }
     }

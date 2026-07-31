@@ -1,4 +1,3 @@
-use std::num::NonZeroU64;
 use std::time::Duration;
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, StripChunks};
@@ -13,74 +12,6 @@ use crate::png::{crc, recoverer};
 pub struct UnknownTexture {
     pub path: String,
     pub bytes: Vec<u8>,
-}
-
-/// Decodes PNG dimensions and estimates uncompressed IDAT size instantly from raw headers.
-fn get_raw_uncompressed_size(bytes: &[u8]) -> Option<usize> {
-    if bytes.len() < 26 {
-        return None;
-    }
-    if bytes[0..8] != [137, 80, 78, 71, 13, 10, 26, 10] {
-        return None;
-    }
-    if &bytes[12..16] != b"IHDR" {
-        return None;
-    }
-
-    let width = u32::from_be_bytes(bytes[16..20].try_into().ok()?) as usize;
-    let height = u32::from_be_bytes(bytes[20..24].try_into().ok()?) as usize;
-    let bit_depth = bytes[24] as usize;
-    let color_type = bytes[25];
-
-    let channels = match color_type {
-        0 => 1, // Grayscale
-        2 => 3, // RGB
-        3 => 1, // Palette (indexed)
-        4 => 2, // Grayscale + Alpha
-        6 => 4, // RGBA
-        _ => 4, // Fallback
-    };
-
-    let bits_per_pixel = channels * bit_depth;
-    let row_bytes = (width * bits_per_pixel).div_ceil(8) + 1;
-    Some(row_bytes * height)
-}
-
-/// Formula generated using a script
-fn get_zopfli_options_normal(raw_size: usize) -> oxipng::ZopfliOptions {
-    let (iterations, without_improvement, splits) = if raw_size < 10_000 {
-        (10, 6, 1)
-    } else if raw_size < 100_000 {
-        (9, 3, 1)
-    } else if raw_size < 1_000_000 {
-        (9, 2, 1)
-    } else {
-        (9, 1, 2)
-    };
-
-    oxipng::ZopfliOptions {
-        iteration_count: NonZeroU64::new(iterations).unwrap(),
-        iterations_without_improvement: NonZeroU64::new(without_improvement).unwrap(),
-        maximum_block_splits: splits,
-    }
-}
-
-fn get_zopfli_options_best(raw_size: usize) -> oxipng::ZopfliOptions {
-    let (iterations, without_improvement, splits) = if raw_size < 10_000 {
-        (10, 6, 1)
-    } else if raw_size < 100_000 {
-        (16, 6, 1)
-    } else if raw_size < 1_000_000 {
-        (20, 6, 2)
-    } else {
-        (22, 7, 2)
-    };
-
-    oxipng::ZopfliOptions {
-        iteration_count: NonZeroU64::new(iterations).unwrap(),
-        iterations_without_improvement: NonZeroU64::new(without_improvement).unwrap(),
-        maximum_block_splits: splits,
-    }
 }
 
 impl UnknownTexture {
@@ -145,16 +76,10 @@ impl UnknownTexture {
             Compression::Fastest => FASTEST_OPTIONS.clone(),
             Compression::Fast => FAST_OPTIONS.clone(),
             Compression::Normal => {
-                let mut opts = NORMAL_OPTIONS.clone();
-                let raw_size = get_raw_uncompressed_size(bytes).unwrap_or(bytes.len());
-                opts.deflater = Deflater::Zopfli(get_zopfli_options_normal(raw_size));
-                opts
+                NORMAL_OPTIONS.clone()
             }
             Compression::Best => {
-                let mut opts = BEST_OPTIONS.clone();
-                let raw_size = get_raw_uncompressed_size(bytes).unwrap_or(bytes.len());
-                opts.deflater = Deflater::Zopfli(get_zopfli_options_best(raw_size));
-                opts
+                BEST_OPTIONS.clone()
             }
             Compression::Ultra => {
                 ULTRA_OPTIONS.clone()

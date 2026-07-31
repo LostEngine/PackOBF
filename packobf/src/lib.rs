@@ -498,7 +498,7 @@ fn parse_path(path: &str) -> (String, Identifier) {
     let overlay = if path.starts_with("assets/") {
         "".to_string()
     } else {
-        parts.next().unwrap().to_string()
+        parts.next().unwrap_or("").to_string()
     };
 
     parts.next(); // skip assets

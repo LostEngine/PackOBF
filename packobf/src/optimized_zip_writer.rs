@@ -188,11 +188,11 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 out
             }
             Compression::Normal => {
-                let pre_check_result = analyze_and_get_zopfli_config_normal(&data);
+                let pre_check_result = analyze_and_get_zopfli_config_normal(data);
                 Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
             }
             Compression::Best => {
-                let pre_check_result = analyze_and_get_zopfli_config_best(&data);
+                let pre_check_result = analyze_and_get_zopfli_config_best(data);
                 Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
             }
             Compression::Ultra => {

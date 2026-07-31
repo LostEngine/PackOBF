@@ -220,6 +220,7 @@ fn analyze(data: &[u8]) -> Result<(usize, f64), PreCheckResult> {
         return Err(PreCheckResult::Skip);
     }
 
+    #[allow(clippy::unwrap_used)]
     let mut compressor = Compressor::new(CompressionLvl::new(9).unwrap());
     let max_buf_len = compressor.deflate_compress_bound(original_size);
     let mut compressed_buf = vec![0u8; max_buf_len];

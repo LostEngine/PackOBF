@@ -239,7 +239,7 @@ fn rebuild_atlas(pack: &ResourcePack) {
         atlas.sources.retain(|source| !matches!(source, Source::Directory { .. } | Source::Single { .. }));
         match atlas.atlas_type {
             AtlasType::Blocks => {
-                if atlas.overlay == "" {
+                if atlas.overlay.is_empty() {
                     block_atlas_exists = true;
                 }
                 atlas.sources.push(Source::Directory {
@@ -248,7 +248,7 @@ fn rebuild_atlas(pack: &ResourcePack) {
                 });
             }
             AtlasType::Items => {
-                if atlas.overlay == "" {
+                if atlas.overlay.is_empty() {
                     item_atlas_exists = true;
                 }
                 atlas.sources.push(Source::Directory {
