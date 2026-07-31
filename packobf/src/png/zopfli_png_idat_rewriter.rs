@@ -59,6 +59,7 @@ pub fn rewrite_idat_with_zopfli(
                     ..
                     chunk_end - 4 // removes the zlib checksum
                 ];
+            // TODO: Use IHDR to calculate the decompressed size so we don't need flat2 anymore and we can use libdeflate
             let mut decoder = DeflateDecoder::new(data);
 
             let mut original_data = Vec::new();
