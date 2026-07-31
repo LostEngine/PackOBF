@@ -46,14 +46,14 @@ fn parse_resource_pack_file(
         current: name.to_string(),
     });
     #[cfg(feature = "profiling")]
-    let _ = crate::profiler::profiler::ScopeTimer::new(
+    let _ = crate::profiler::ScopeTimer::new(
         if name.ends_with(".json") || name.ends_with(".mcmeta") {
             "parse_resource_pack_files::json"
-        } else if name.ends_with(".png") && crate::get_type(&name) == Some("textures") {
+        } else if name.ends_with(".png") && get_type(&name) == Some("textures") {
             "parse_resource_pack_files::texture"
         } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
             "parse_resource_pack_files::shader"
-        } else if name.ends_with(".ogg") && crate::get_type(&name) == Some("sounds") {
+        } else if name.ends_with(".ogg") && get_type(&name) == Some("sounds") {
             "parse_resource_pack_files::sound"
         } else {
             "parse_resource_pack_files::unknown"

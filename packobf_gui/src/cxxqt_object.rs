@@ -191,9 +191,10 @@ impl qobject::AppController {
 
         let options = Options {
             compression: match self.compression() {
-                0 => Compression::Simplest,
-                1 => Compression::Normal,
-                _ => Compression::Max,
+                0 => Compression::Fastest,
+                1 => Compression::Fast,
+                2 => Compression::Normal,
+                _ => Compression::Best,
             },
             shader_compression: match self.shader_compression() {
                 0 => ShaderCompression::None,

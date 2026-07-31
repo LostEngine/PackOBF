@@ -30,7 +30,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
         };
 
         let options = if options.is_null() {
-            Options::simplest()
+            Options::fastest()
         } else {
             let comp_val = env
                 .get_field(&options, jni_str!("compression"), jni_sig!("I"))?
@@ -41,9 +41,10 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
 
             Options {
                 compression: match comp_val {
-                    0 => Compression::Simplest,
-                    1 => Compression::Normal,
-                    _ => Compression::Max,
+                    0 => Compression::Fastest,
+                    1 => Compression::Fast,
+                    2 => Compression::Normal,
+                    _ => Compression::Best,
                 },
                 shader_compression: match shader_comp_val {
                     0 => ShaderCompression::None,

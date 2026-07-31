@@ -30,7 +30,8 @@ use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
 use crate::resource_pack::pack::ResourcePack;
-use crate::LogLevel::Info;
+use crate::LogLevel::{Info, Warning};
+use dashmap::DashMap;
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::error::Error;
@@ -50,7 +51,7 @@ pub fn process_zip(
 ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
     let _ = progress.send(Progress::Idle);
     #[cfg(feature = "profiling")]
-    profiler::profiler::PROFILER.store(Arc::new(profiler::profiler::Profiler::new()));
+    profiler::PROFILER.store(Arc::new(profiler::Profiler::new()));
 
     let progress_clone = progress.clone();
     let reader = Cursor::new(&input_bytes);
@@ -107,11 +108,15 @@ pub fn process_zip(
     let total = items.len();
     let mut output = Cursor::new(Vec::new());
     let writer = OptimizedZipWriter::new(&mut output);
-    let counter = AtomicUsize::new(0);
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
-        writer.add_file("assets\0", Vec::new().as_slice(), options, &None)?;
+        writer.add_file(
+            "assets\0",
+            Vec::new().as_slice(),
+            options,
+            &None,
+        )?;
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
@@ -120,11 +125,24 @@ pub fn process_zip(
             level: Info,
             message: format!("Loading cache from {}", cache),
         });
-        let cache = Cache::load_from_file(cache)?;
-        let _ = logger.send(LogMessage {
-            level: Info,
-            message: format!("Cache loaded: {} items", cache.items.len()),
-        });
+        let cache = match Cache::load_from_file(cache) {
+            Ok(cache) => {
+                let _ = logger.send(LogMessage {
+                    level: Info,
+                    message: format!("Cache loaded: {} items", cache.items.len()),
+                });
+                cache
+            }
+            Err(e) => {
+                let _ = logger.send(LogMessage {
+                    level: Warning,
+                    message: format!("Invalid cache file, creating a new one. Error: {}", e),
+                });
+                Cache {
+                    items: DashMap::new(),
+                }
+            }
+        };
         Some(cache)
     } else {
         None
@@ -160,6 +178,7 @@ pub fn process_zip(
             .collect();
 
         let total_to_optimize = to_optimize.len();
+        let counter = AtomicUsize::new(0);
         to_optimize.into_par_iter().for_each(|(name, item)| {
             let _ = progress.send(Progress::Optimizing {
                 current: name.to_string(),
@@ -182,6 +201,8 @@ pub fn process_zip(
                 _ => {}
             }
         });
+
+        let counter = AtomicUsize::new(0);
         items.par_iter_mut().for_each(|(name, item)| {
             match add_item_to_archive(
                 options, &progress, logger, total, &writer, &counter, &cache, name, item,
@@ -206,7 +227,7 @@ pub fn process_zip(
 
     let _ = progress.send(Progress::Done);
     #[cfg(feature = "profiling")]
-    profiler::profiler::PROFILER.load().print();
+    profiler::PROFILER.load().print();
     Ok(output.into_inner())
 }
 
@@ -253,7 +274,12 @@ fn add_item_to_archive(
         ),
         ResourcePackItem::Shader(o) => {
             o.optimize(options, logger);
-            writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
+            writer.add_file(
+                name.as_str(),
+                o.content.as_bytes(),
+                options,
+                cache,
+            )
         }
         ResourcePackItem::Json(o) => writer.add_file(
             name.as_str(),
@@ -261,33 +287,60 @@ fn add_item_to_archive(
             options,
             cache,
         ),
-        ResourcePackItem::Model(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Unknown(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
-        }
-        ResourcePackItem::BlockStateDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::FontDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::ItemDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Sound(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
-        }
-        ResourcePackItem::SoundDefinitions(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Atlas(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::UnknownTexture(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
-        }
+        ResourcePackItem::Model(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::Unknown(o) => writer.add_file(
+            name.as_str(),
+            o.bytes.as_slice(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::BlockStateDefinition(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::FontDefinition(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::ItemDefinition(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::Sound(o) => writer.add_file(
+            name.as_str(),
+            o.bytes.as_slice(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::SoundDefinitions(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::Atlas(o) => writer.add_file(
+            name.as_str(),
+            o.to_string().as_bytes(),
+            options,
+            cache,
+        ),
+        ResourcePackItem::UnknownTexture(o) => writer.add_file(
+            name.as_str(),
+            o.bytes.as_slice(),
+            options,
+            cache,
+        ),
     }?;
     Ok(())
 }

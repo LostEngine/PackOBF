@@ -1,28 +1,25 @@
 use crate::cache::{Cache, ItemType};
-pub(crate) use crate::options::ZOPFLI_OPTIONS;
-use crate::options::{Compression, Options};
+use crate::options::{analyze_and_get_zopfli_config_best, analyze_and_get_zopfli_config_normal, Compression, Options, PreCheckResult, ULTRA_ZOPFLI_OPTIONS};
 use crate::profile_scope;
 use byteorder::{LittleEndian, WriteBytesExt};
-use crc32fast::Hasher as Crc32Hasher;
 use dashmap::DashMap;
 use libdeflater::CompressionLvl;
 use sha2::{Digest, Sha256};
 use std::io::{self, Error, Seek, Write};
 use std::sync::{Arc, Mutex};
+use crate::options::PreCheckResult::{CompressWithZopfli, Skip};
 
 #[derive(Clone, Debug)]
 pub struct CachedFileData {
     pub header_offset: u32,
-    pub crc32: u32,
+    pub compression_method: u16,
     pub compressed_size: u32,
-    pub uncompressed_size: u32,
 }
 
 struct CentralDirectoryEntry {
     filename: String,
-    crc32: u32,
+    compression_method: u16,
     compressed_size: u32,
-    uncompressed_size: u32,
     header_offset: u32,
 }
 
@@ -65,16 +62,20 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
 
             return self.record_entry(&mut inner, filename, cached_data);
         }
-
-        // Calculate CRC32 (Required for Central Directory)
-        let mut crc32_hasher = Crc32Hasher::new();
-        crc32_hasher.update(data);
-        let crc32 = crc32_hasher.finalize();
         let uncompressed_size = data.len() as u32;
 
         // Compress the data using DEFLATE
-        let compressed_data: Vec<u8> = Self::compress(data, options, &hash, cache)?;
-        let compressed_size = compressed_data.len() as u32;
+        let compressed_data = Self::compress(data, options, &hash, cache)?;
+        let mut compressed_size = compressed_data.len() as u32;
+        let using_store = compressed_size == 0; // Skip compression if it's larger when compressed
+        if using_store {
+            compressed_size = uncompressed_size;
+        }
+        let compression_method = if using_store {
+            0 // Store
+        } else {
+            8 // Deflate
+        };
 
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
@@ -90,9 +91,9 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         // Write the Minimized Local File Header (LFH)
         // We zero out the metadata, filename length, and omit the filename string to save space.
         inner.writer.write_u32::<LittleEndian>(0x04034b50)?; // LFH Signature
-        inner.writer.write_u16::<LittleEndian>(10)?; // Version needed to extract (1.0)
+        inner.writer.write_u16::<LittleEndian>(0)?; // Version needed to extract (Zeroed)
         inner.writer.write_u16::<LittleEndian>(0)?; // General purpose bit flag
-        inner.writer.write_u16::<LittleEndian>(8)?; // Compression method (8 = Deflate)
+        inner.writer.write_u16::<LittleEndian>(0)?; // Compression method (Zeroed)
         inner.writer.write_u32::<LittleEndian>(0)?; // Last mod file time and date (Zeroed)
         inner.writer.write_u32::<LittleEndian>(0)?; // CRC-32 (Zeroed)
         inner.writer.write_u32::<LittleEndian>(0)?; // Compressed size (Zeroed)
@@ -101,22 +102,24 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         inner.writer.write_u16::<LittleEndian>(0)?; // Extra field length (Zeroed)
 
         // Write the actual compressed payload
-        inner.writer.write_all(&compressed_data)?;
+        if using_store {
+            inner.writer.write_all(data)?; // When using Store
+        } else {
+            inner.writer.write_all(&compressed_data)?; // When using Deflate
+        }
 
         let new_cache = CachedFileData {
             header_offset,
-            crc32,
-            compressed_size,
-            uncompressed_size,
+            compression_method,
+            compressed_size
         };
 
         // Insert into the hashmap so future identical files point here
         self.content_cache.insert(hash, new_cache.clone());
         inner.cd_entries.push(CentralDirectoryEntry {
             filename: filename.to_string(),
-            crc32: new_cache.crc32,
+            compression_method: new_cache.compression_method,
             compressed_size: new_cache.compressed_size,
-            uncompressed_size: new_cache.uncompressed_size,
             header_offset: new_cache.header_offset,
         });
 
@@ -140,14 +143,19 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 return Ok(bytes);
             }
         }
+        let input_size = data.len();
         Ok(match options.compression {
-            Compression::Simplest => {
+            Compression::Fastest => {
                 let mut compressor = libdeflater::Compressor::default();
                 let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
                 let size = compressor
                     .deflate_compress(data, &mut out)
                     .map_err(|_| Error::other("Compression failed"))?;
                 out.truncate(size);
+                let out_size = out.len();
+                if out_size > input_size {
+                    out = vec![];
+                }
                 if let Some(cache) = cache {
                     cache.add_item_hash(
                         hash,
@@ -158,31 +166,86 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 }
                 out
             }
-            Compression::Normal => {
+            Compression::Fast => {
                 let mut compressor = libdeflater::Compressor::new(CompressionLvl::best());
                 let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
                 let size = compressor
                     .deflate_compress(data, &mut out)
                     .map_err(|_| Error::other("Compression failed"))?;
                 out.truncate(size);
+                let out_size = out.len();
+                if out_size > input_size {
+                    out = vec![];
+                }
                 if let Some(cache) = cache {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Normal as u8,
+                        crate::cache::Compression::Fast as u8,
                         ItemType::Generic,
                     )
                 }
                 out
             }
-            Compression::Max => {
+            Compression::Normal => {
+                let pre_check_result = analyze_and_get_zopfli_config_normal(&data);
+                Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
+            }
+            Compression::Best => {
+                let pre_check_result = analyze_and_get_zopfli_config_best(&data);
+                Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
+            }
+            Compression::Ultra => {
                 let mut encoder = zopfli::DeflateEncoder::new(
-                    ZOPFLI_OPTIONS.to_owned(),
+                    ULTRA_ZOPFLI_OPTIONS.to_owned(),
                     zopfli::BlockType::Dynamic,
                     Vec::new(),
                 );
                 encoder.write_all(data)?;
-                let out = encoder.finish()?;
+                let mut out = encoder.finish()?;
+                let out_size = out.len();
+                if out_size > input_size {
+                    out = vec![];
+                }
+                if let Some(cache) = cache {
+                    cache.add_item_hash(
+                        hash,
+                        &*out,
+                        crate::cache::Compression::Ultra as u8,
+                        ItemType::Generic,
+                    )
+                }
+                out
+            }
+        })
+    }
+
+    fn compress_with_pre_check(data: &[u8], hash: &[u8; 32], cache: &Option<Cache>, input_size: usize, pre_check_result: PreCheckResult) -> Result<Vec<u8>, Error> {
+        Ok(match pre_check_result {
+            CompressWithZopfli(options) => {
+                let mut encoder = zopfli::DeflateEncoder::new(
+                    options,
+                    zopfli::BlockType::Dynamic,
+                    Vec::new(),
+                );
+                encoder.write_all(data)?;
+                let mut out = encoder.finish()?;
+                let out_size = out.len();
+                if out_size > input_size {
+                    out = vec![];
+                }
+                if let Some(cache) = cache {
+                    cache.add_item_hash(
+                        hash,
+                        &*out,
+                        crate::cache::Compression::Best as u8,
+                        ItemType::Generic,
+                    )
+                }
+                out
+            }
+            Skip => {
+                let out = vec![];
                 if let Some(cache) = cache {
                     cache.add_item_hash(
                         hash,
@@ -204,9 +267,8 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     ) -> io::Result<()> {
         inner.cd_entries.push(CentralDirectoryEntry {
             filename: filename.to_string(),
-            crc32: data.crc32,
+            compression_method: data.compression_method,
             compressed_size: data.compressed_size,
-            uncompressed_size: data.uncompressed_size,
             header_offset: data.header_offset,
         });
         Ok(())
@@ -229,14 +291,14 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
             let filename_bytes = entry.filename.as_bytes();
 
             writer.write_u32::<LittleEndian>(0x02014b50)?; // CD Signature
-            writer.write_u16::<LittleEndian>(10)?; // Version made by
-            writer.write_u16::<LittleEndian>(10)?; // Version needed to extract
+            writer.write_u16::<LittleEndian>(0)?; // Version made by
+            writer.write_u16::<LittleEndian>(0)?; // Version needed to extract
             writer.write_u16::<LittleEndian>(0)?; // General purpose bit flag
-            writer.write_u16::<LittleEndian>(8)?; // Compression method (8 = Deflate)
+            writer.write_u16::<LittleEndian>(entry.compression_method)?; // Compression method
             writer.write_u32::<LittleEndian>(0)?; // Last mod file time and date
-            writer.write_u32::<LittleEndian>(entry.crc32)?; // Actual CRC-32
+            writer.write_u32::<LittleEndian>(0)?; // Actual CRC-32
             writer.write_u32::<LittleEndian>(entry.compressed_size)?; // Actual Compressed size
-            writer.write_u32::<LittleEndian>(entry.uncompressed_size)?; // Actual Uncompressed size
+            writer.write_u32::<LittleEndian>(0)?; // Actual Uncompressed size
             writer.write_u16::<LittleEndian>(filename_bytes.len() as u16)?; // File name length
             writer.write_u16::<LittleEndian>(0)?; // Extra field length
             writer.write_u16::<LittleEndian>(0)?; // File comment length

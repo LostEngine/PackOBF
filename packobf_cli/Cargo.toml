@@ -3,6 +3,7 @@ name = "packobf_cli"
 version = "0.2.1"
 edition = "2024"
 license = "MIT"
+default-run = "packobf_cli"
 
 [dependencies]
 packobf = { path = "../packobf" }

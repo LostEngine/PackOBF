@@ -60,7 +60,7 @@ async fn main() {
         DecimalBytes(bytes.len() as u64),
         DecimalBytes(input_size as u64),
         DecimalBytes(bytes.len().abs_diff(input_size) as u64),
-        100.0 - ratio * 100.0,
+        (100.0 - ratio * 100.0).abs(),
         if bytes.len() < input_size {
             "smaller"
         } else {
