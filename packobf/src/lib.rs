@@ -349,7 +349,7 @@ fn collect_files(
     pack: Arc<ResourcePack>,
     thread_pool: &ThreadPool,
 ) -> Vec<(String, ResourcePackItem)> {
-    profile_scope!("collect_files");
+    profile_scope!(std::any::type_name_of_val(&collect_files));
     thread_pool.install(|| {
         let texture_iter = pack.textures.par_iter().map(|kv| {
             (

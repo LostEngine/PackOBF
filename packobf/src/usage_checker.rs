@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
-    profile_scope!("check_usage");
+    profile_scope!(std::any::type_name_of_val(&check_usage));
     let counter = mapping::get_id_usage_counter();
 
     rayon::scope(|s| {

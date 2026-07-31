@@ -84,13 +84,25 @@ impl Options {
 }
 
 #[repr(u8)]
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(ValueEnum, Clone, Debug, Copy)]
 pub enum Compression {
     Fastest = 0,
     Fast = 1,
     Normal = 2,
     Best = 3,
     Ultra = 4,
+}
+
+impl Compression {
+    pub fn from_u8(value: u8) -> Self {
+        match value {
+            0 => Compression::Fastest,
+            1 => Compression::Fast,
+            2 => Compression::Normal,
+            3 => Compression::Best,
+            _ => Compression::Ultra,
+        }
+    }
 }
 
 #[repr(u8)]
@@ -156,6 +168,8 @@ pub enum PreCheckResult {
     Skip,
     /// Use Zopfli with dynamically assigned options
     CompressWithZopfli(zopfli::Options),
+    /// Use Libdeflater Level 12
+    LibDeflater,
 }
 
 /// Pre-checks data compressibility using libdeflater (Level 9)
@@ -166,24 +180,7 @@ pub fn analyze_and_get_zopfli_config_normal(data: &[u8]) -> PreCheckResult {
         Err(value) => return value,
     };
 
-    // Less than 1% savings
-    if savings_ratio < 0.01 {
-        return PreCheckResult::Skip; // Don't waste CPU time on Zopfli
-    }
-
-    // 1% to 8% savings
-    if savings_ratio < 0.08 {
-        return PreCheckResult::CompressWithZopfli(FASTEST_ZOPFLI_OPTIONS.to_owned());
-    }
-
-    // > 8% savings
-    PreCheckResult::CompressWithZopfli(match original_size {
-        0..=51_200 => SLOW_ZOPFLI_OPTIONS.to_owned(),
-
-        51_201..=512_000 => NORMAL_ZOPFLI_OPTIONS.to_owned(),
-
-        _ => FAST_ZOPFLI_OPTIONS.to_owned(),
-    })
+    get_normal_precheck_result(savings_ratio, original_size)
 }
 
 /// Pre-checks data compressibility using libdeflater (Level 9)
@@ -194,24 +191,7 @@ pub fn analyze_and_get_zopfli_config_best(data: &[u8]) -> PreCheckResult {
         Err(value) => return value,
     };
 
-    // Less than 1% savings
-    if savings_ratio < 0.01 {
-        return PreCheckResult::Skip; // Don't waste CPU time on Zopfli
-    }
-
-    // 1% to 8% savings
-    if savings_ratio < 0.08 {
-        return PreCheckResult::CompressWithZopfli(FAST_ZOPFLI_OPTIONS.to_owned());
-    }
-
-    // > 8% savings
-    PreCheckResult::CompressWithZopfli(match original_size {
-        0..=51_200 => SLOWEST_ZOPFLI_OPTIONS.to_owned(),
-
-        51_201..=512_000 => SLOW_ZOPFLI_OPTIONS.to_owned(),
-
-        _ => NORMAL_ZOPFLI_OPTIONS.to_owned(),
-    })
+    get_best_pre_check_result(savings_ratio, original_size)
 }
 
 fn analyze(data: &[u8]) -> Result<(usize, f64), PreCheckResult> {
@@ -233,4 +213,46 @@ fn analyze(data: &[u8]) -> Result<(usize, f64), PreCheckResult> {
     let bytes_saved = original_size.saturating_sub(fast_compressed_size);
     let savings_ratio = bytes_saved as f64 / original_size as f64;
     Ok((original_size, savings_ratio))
+}
+
+pub fn get_best_pre_check_result(savings_ratio: f64, original_size: usize) -> PreCheckResult {
+    // Less than 1% savings
+    if savings_ratio < 0.01 {
+        return PreCheckResult::Skip; // Don't waste CPU time on Zopfli
+    }
+
+    // 1% to 8% savings
+    if savings_ratio < 0.08 {
+        return PreCheckResult::CompressWithZopfli(FAST_ZOPFLI_OPTIONS.to_owned());
+    }
+
+    // > 8% savings
+    PreCheckResult::CompressWithZopfli(match original_size {
+        0..=51_200 => SLOWEST_ZOPFLI_OPTIONS.to_owned(),
+
+        51_201..=512_000 => SLOW_ZOPFLI_OPTIONS.to_owned(),
+
+        _ => NORMAL_ZOPFLI_OPTIONS.to_owned(),
+    })
+}
+
+pub fn get_normal_precheck_result(savings_ratio: f64, original_size: usize) -> PreCheckResult {
+    // Less than 1% savings
+    if savings_ratio < 0.01 {
+        return PreCheckResult::Skip; // Don't waste CPU time on Zopfli
+    }
+
+    // 1% to 8% savings
+    if savings_ratio < 0.08 {
+        return PreCheckResult::LibDeflater;
+    }
+
+    // > 8% savings
+    PreCheckResult::CompressWithZopfli(match original_size {
+        0..=51_200 => NORMAL_ZOPFLI_OPTIONS.to_owned(),
+
+        51_201..=512_000 => FAST_ZOPFLI_OPTIONS.to_owned(),
+
+        _ => FASTEST_ZOPFLI_OPTIONS.to_owned(),
+    })
 }

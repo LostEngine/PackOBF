@@ -18,7 +18,7 @@ pub fn rename_files(
     pack: &ResourcePack,
     mapping: &mut Mapping,
 ) {
-    profile_scope!("rename_files");
+    profile_scope!(std::any::type_name_of_val(&rename_files));
     let id_counter = &mapping::get_id_usage_counter();
     rayon::scope(|s| {
         s.spawn(|_| rename_overlays(pack, &mut mapping.overlay_mappings));
@@ -29,7 +29,7 @@ pub fn rename_files(
 }
 
 fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
-    profile_scope!("rename_files::overlays");
+    profile_scope!(std::any::type_name_of_val(&rename_overlays));
     let mut count = 0;
     if let Some(mut mcmeta) = pack.json_files.get_mut("pack.mcmeta") {
         if let Some(entries) = mcmeta
@@ -58,7 +58,7 @@ fn rename_sounds(
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
-    profile_scope!("rename_files::sounds");
+    profile_scope!(std::any::type_name_of_val(&rename_sounds));
     let mut sounds: Vec<(String, Sound)> = pack
         .sounds
         .iter()
@@ -106,7 +106,7 @@ fn rename_textures(
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
-    profile_scope!("rename_files::textures");
+    profile_scope!(std::any::type_name_of_val(&rename_textures));
     let mut textures: Vec<(String, Texture)> = pack
         .textures
         .iter()
@@ -288,7 +288,7 @@ fn rename_models(
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
-    profile_scope!("rename_files::models");
+    profile_scope!(std::any::type_name_of_val(&rename_models));
     let mut models: Vec<(String, Model)> = pack
         .models
         .iter()

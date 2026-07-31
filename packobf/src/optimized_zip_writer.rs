@@ -51,7 +51,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         options: &Options,
         cache: &Option<Cache>,
     ) -> io::Result<()> {
-        profile_scope!("add_file::zip");
+        profile_scope!(std::any::type_name_of_val(&OptimizedZipWriter::<W>::add_file));
         let mut sha256 = Sha256::new();
         sha256.update(data);
         let hash: [u8; 32] = sha256.finalize().into();
@@ -160,7 +160,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Fastest as u8,
+                        Compression::Fastest as u8,
                         ItemType::Generic,
                     )
                 }
@@ -181,7 +181,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Fast as u8,
+                        Compression::Fast as u8,
                         ItemType::Generic,
                     )
                 }
@@ -211,7 +211,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Ultra as u8,
+                        Compression::Ultra as u8,
                         ItemType::Generic,
                     )
                 }
@@ -238,24 +238,45 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Best as u8,
+                        Compression::Best as u8,
                         ItemType::Generic,
                     )
                 }
                 out
             }
+            PreCheckResult::LibDeflater => {
+                let mut compressor = libdeflater::Compressor::new(CompressionLvl::best());
+                let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
+                let size = compressor
+                    .deflate_compress(data, &mut out)
+                    .map_err(|_| Error::other("Compression failed"))?;
+                out.truncate(size);
+                let out_size = out.len();
+                if out_size > input_size {
+                    out = vec![];
+                }
+                if let Some(cache) = cache {
+                    cache.add_item_hash(
+                        hash,
+                        &*out,
+                        Compression::Fast as u8,
+                        ItemType::Generic,
+                    )
+                }
+                out
+            },
             Skip => {
                 let out = vec![];
                 if let Some(cache) = cache {
                     cache.add_item_hash(
                         hash,
                         &*out,
-                        crate::cache::Compression::Best as u8,
+                        Compression::Best as u8,
                         ItemType::Generic,
                     )
                 }
                 out
-            }
+            },
         })
     }
 
@@ -277,7 +298,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     /// Writes the Central Directory and End of Central Directory (EOCD) records.
     /// This finalizes the ZIP file, making it valid for CD-parsing tools.
     pub fn finish(&self) -> io::Result<()> {
-        profile_scope!("finish::zip");
+        profile_scope!(std::any::type_name_of_val(&OptimizedZipWriter::<W>::finish));
         let mut inner_guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         let Inner {
             ref mut writer,

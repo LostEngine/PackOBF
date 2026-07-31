@@ -3,7 +3,7 @@ use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufWriter, Read, Write};
-
+use crate::options::Compression;
 use crate::profile_scope;
 
 const MAGIC_NUMBER: [u8; 10] = *b"PACKOBF001"; // Increase version number each time compression is changed (hex number)
@@ -11,28 +11,6 @@ const MAGIC_NUMBER: [u8; 10] = *b"PACKOBF001"; // Increase version number each t
 pub struct CachedItem {
     pub compression: Compression,
     pub data: Vec<u8>,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-pub enum Compression {
-    Fastest = 0,
-    Fast = 1,
-    Normal = 2,
-    Best = 3,
-    Ultra = 4,
-}
-
-impl Compression {
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => Compression::Fastest,
-            1 => Compression::Fast,
-            2 => Compression::Normal,
-            3 => Compression::Best,
-            _ => Compression::Ultra,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -65,7 +43,7 @@ pub struct Cache {
 
 impl Cache {
     pub fn save_to_file(&self, path: &str) -> io::Result<()> {
-        profile_scope!("save_to_file::cache");
+        profile_scope!(std::any::type_name_of_val(&Cache::save_to_file));
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
@@ -97,7 +75,7 @@ impl Cache {
     }
 
     pub fn load_from_file(path: &str) -> io::Result<Self> {
-        profile_scope!("load_from_file::cache");
+        profile_scope!(std::any::type_name_of_val(&Cache::load_from_file));
         let file = File::open(path);
         if let Err(e) = file {
             return Err(e)

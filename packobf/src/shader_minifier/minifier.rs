@@ -55,7 +55,7 @@ impl Minifier {
         source: &str,
         rename: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        profile_scope!("minify_shader");
+        profile_scope!(std::any::type_name_of_val(&Minifier::minify));
         let mut ast =
             TranslationUnit::parse(source).map_err(|e| format!("GLSL Parse Error: {}", e))?;
 
