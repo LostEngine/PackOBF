@@ -3,3 +3,5 @@ target
 
 # keep your zip files!
 **/*.zip
+
+packobf_gui/.qmlls.ini
