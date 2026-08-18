@@ -27,18 +27,18 @@ impl Mapping {
     pub fn apply_mapping(&self, id: &str, category: IdCategory) -> String {
         match category {
             IdCategory::Model => {
-                if let Some(mapped) = &self.model_mappings.get(id) {
-                    return mapped.to_string();
+                if let Some(mapped) = self.model_mappings.get(id) {
+                    return mapped.clone();
                 }
             }
             IdCategory::Texture => {
-                if let Some(mapped) = &self.texture_mappings.get(id) {
-                    return mapped.to_string();
+                if let Some(mapped) = self.texture_mappings.get(id) {
+                    return mapped.clone();
                 }
             }
             IdCategory::Sound => {
-                if let Some(mapped) = &self.sound_mappings.get(id) {
-                    return mapped.to_string();
+                if let Some(mapped) = self.sound_mappings.get(id) {
+                    return mapped.clone();
                 }
             }
         }

@@ -111,12 +111,7 @@ pub fn process_zip(
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
-        writer.add_file(
-            "assets\0",
-            Vec::new().as_slice(),
-            options,
-            &None,
-        )?;
+        writer.add_file("assets\0", Vec::new().as_slice(), options, &None)?;
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
@@ -149,30 +144,14 @@ pub fn process_zip(
     };
 
     pool.install(|| {
-        let total_to_optimize = AtomicUsize::new(0);
         let to_optimize: Vec<_> = items
             .par_iter_mut()
             .filter(|(_, item)| match item {
-                ResourcePackItem::Texture(_) => {
-                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
-                    true
-                }
-                ResourcePackItem::UnknownTexture(_) => {
-                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
-                    true
-                }
+                ResourcePackItem::Texture(_) | ResourcePackItem::UnknownTexture(_) => true,
                 ResourcePackItem::Shader(_) => {
-                    if options.shader_compression != ShaderCompression::None {
-                        total_to_optimize.fetch_add(1, Ordering::Relaxed);
-                        true
-                    } else {
-                        false
-                    }
+                    options.shader_compression != ShaderCompression::None
                 }
-                ResourcePackItem::Sound(_) => {
-                    total_to_optimize.fetch_add(1, Ordering::Relaxed);
-                    true
-                }
+                ResourcePackItem::Sound(_) => true,
                 _ => false,
             })
             .collect();
@@ -220,9 +199,8 @@ pub fn process_zip(
 
     writer.finish()?;
 
-    if let Some(cache) = cache {
-        #[allow(clippy::expect_used)] // Should never happen
-        let _ = cache.save_to_file(cache_file.clone().expect("cache_file is None").as_str());
+    if let (Some(cache), Some(cache_path)) = (cache, cache_file.as_deref()) {
+        let _ = cache.save_to_file(cache_path);
     }
 
     let _ = progress.send(Progress::Done);
@@ -242,27 +220,17 @@ fn add_item_to_archive(
     cache: &Option<Cache>,
     name: &mut String,
     item: &mut ResourcePackItem,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = progress.send(Progress::Building {
         current: name.to_string(),
         index: counter.fetch_add(1, Ordering::Relaxed),
         total,
     });
     if !name.starts_with("assets/") {
-        let mut parts = name.split('/');
-        let overlay = match parts.next() {
-            Some(overlay) => overlay.to_string(),
-            None => {
-                let _ = logger.send(LogMessage {
-                    level: LogLevel::Error,
-                    message: format!("Invalid file path: {}", name),
-                });
-                return Ok(());
+        if let Some((overlay, rest)) = name.split_once('/') {
+            if let Some(value) = mapping::get_mappings().overlay_mappings.get(overlay) {
+                *name = format!("{value}/{rest}");
             }
-        };
-        if let Some(value) = mapping::get_mappings().overlay_mappings.get(&overlay) {
-            let rest = parts.collect::<Vec<_>>().join("/");
-            *name = format!("{}/{}", value, rest);
         }
     }
     match item {
@@ -274,12 +242,7 @@ fn add_item_to_archive(
         ),
         ResourcePackItem::Shader(o) => {
             o.optimize(options, logger);
-            writer.add_file(
-                name.as_str(),
-                o.content.as_bytes(),
-                options,
-                cache,
-            )
+            writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
         }
         ResourcePackItem::Json(o) => writer.add_file(
             name.as_str(),
@@ -287,60 +250,33 @@ fn add_item_to_archive(
             options,
             cache,
         ),
-        ResourcePackItem::Model(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::Unknown(o) => writer.add_file(
-            name.as_str(),
-            o.bytes.as_slice(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::BlockStateDefinition(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::FontDefinition(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::ItemDefinition(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::Sound(o) => writer.add_file(
-            name.as_str(),
-            o.bytes.as_slice(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::SoundDefinitions(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::Atlas(o) => writer.add_file(
-            name.as_str(),
-            o.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::UnknownTexture(o) => writer.add_file(
-            name.as_str(),
-            o.bytes.as_slice(),
-            options,
-            cache,
-        ),
+        ResourcePackItem::Model(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Unknown(o) => {
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::BlockStateDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::FontDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::ItemDefinition(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Sound(o) => {
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::SoundDefinitions(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::Atlas(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
+        ResourcePackItem::UnknownTexture(o) => {
+            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+        }
     }?;
     Ok(())
 }
@@ -351,12 +287,14 @@ fn collect_files(
 ) -> Vec<(String, ResourcePackItem)> {
     profile_scope!(std::any::type_name_of_val(&collect_files));
     thread_pool.install(|| {
-        pack.textures.par_iter().map(|kv| {
-            (
-                kv.key().clone(),
-                ResourcePackItem::Texture(kv.value().clone()),
-            )
-        })
+        pack.textures
+            .par_iter()
+            .map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Texture(kv.value().clone()),
+                )
+            })
             .chain(pack.unknown_textures.par_iter().map(|kv| {
                 (
                     kv.key().clone(),
@@ -375,10 +313,11 @@ fn collect_files(
                     ResourcePackItem::Model(kv.value().clone()),
                 )
             }))
-            .chain(pack
-                .json_files
-                .par_iter()
-                .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone()))))
+            .chain(
+                pack.json_files
+                    .par_iter()
+                    .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone()))),
+            )
             .chain(pack.unknown_files.par_iter().map(|kv| {
                 (
                     kv.key().clone(),

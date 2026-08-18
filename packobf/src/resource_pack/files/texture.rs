@@ -50,4 +50,3 @@ impl Texture {
         self.unknown_texture.path.clone()
     }
 }
-

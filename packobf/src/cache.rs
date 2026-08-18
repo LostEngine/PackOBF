@@ -1,10 +1,10 @@
+use crate::options::Compression;
+use crate::profile_scope;
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufWriter, Read, Write};
-use crate::options::Compression;
-use crate::profile_scope;
 
 const MAGIC_NUMBER: [u8; 10] = *b"PACKOBF001"; // Increase version number each time compression is changed (hex number)
 
@@ -76,11 +76,7 @@ impl Cache {
 
     pub fn load_from_file(path: &str) -> io::Result<Self> {
         profile_scope!(std::any::type_name_of_val(&Cache::load_from_file));
-        let file = File::open(path);
-        if let Err(e) = file {
-            return Err(e)
-        }
-        let file = file?;
+        let file = File::open(path)?;
         let mut reader = BufReader::new(file);
         let items = DashMap::new();
 
@@ -117,17 +113,16 @@ impl Cache {
             // Read Data Length and then the Data
             let mut data_len_bytes = [0u8; 8];
             reader.read_exact(&mut data_len_bytes)?;
-            let data_len = u64::from_le_bytes(data_len_bytes) as usize;
+            let data_len = usize::try_from(u64::from_le_bytes(data_len_bytes)).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "Cache entry is too large")
+            })?;
 
             let mut data = vec![0u8; data_len];
             reader.read_exact(&mut data)?;
 
             items.insert(
                 CachedItemKey { hash, item_type },
-                CachedItem {
-                    compression,
-                    data,
-                },
+                CachedItem { compression, data },
             );
         }
 
