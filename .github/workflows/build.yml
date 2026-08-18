@@ -129,13 +129,13 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "v1-rust-qt-6.8.4-${{ matrix.os }}-${{ matrix.target }}"
+          prefix-key: "v1-rust-qt-6.11.2-${{ matrix.os }}-${{ matrix.target }}"
 
       - name: Install Qt
         if: matrix.gui != ''
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.4'
+          version: '6.11.2'
           arch: ${{ matrix.qt-arch }}
 
       - name: Install cross (linux-x86_64-musl and linux-aarch64)
@@ -223,14 +223,14 @@ jobs:
           chmod +x linuxdeployqt-continuous-x86_64.AppImage
           
           # Cleanup Qt installation
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/printsupport
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/sqldrivers
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/help
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/designer
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/qmltooling
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/qmlls
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/qmllint
-          rm -rf ../Qt/6.8.4/gcc_64/plugins/platformthemes/libqgtk3.so
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/printsupport
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/sqldrivers
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/help
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/designer
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/qmltooling
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/qmlls
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/qmllint
+          rm -rf ../Qt/6.11.2/gcc_64/plugins/platformthemes/libqgtk3.so
 
           cat <<EOF > dist/packobf_gui.desktop
           [Desktop Entry]
