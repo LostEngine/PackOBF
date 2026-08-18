@@ -194,7 +194,8 @@ impl qobject::AppController {
                 0 => Compression::Fastest,
                 1 => Compression::Fast,
                 2 => Compression::Normal,
-                _ => Compression::Best,
+                3 => Compression::Best,
+                _ => Compression::Ultra,
             },
             shader_compression: match self.shader_compression() {
                 0 => ShaderCompression::None,
