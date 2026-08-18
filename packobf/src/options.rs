@@ -100,68 +100,52 @@ impl Compression {
             1 => Compression::Fast,
             2 => Compression::Normal,
             3 => Compression::Best,
-            _ => Compression::Ultra,
+            4 => Compression::Ultra,
+            _ => Compression::Normal,
         }
     }
 }
 
 #[repr(u8)]
-#[derive(ValueEnum, Clone, Debug)]
-#[derive(PartialEq)]
+#[derive(ValueEnum, Clone, Debug, PartialEq)]
 pub enum ShaderCompression {
     None = 0,
     Minify = 1,
     MinifyAndObfuscate = 2,
 }
 
-#[allow(clippy::unwrap_used)]
-pub static ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(25).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(3).unwrap(),
-    maximum_block_splits: 15,
-});
+pub static ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| create_zopfli_options(25, 3, 15));
+
+pub static FASTEST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(3, 1, 2));
+
+pub static FAST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(5, 2, 5));
+
+pub static NORMAL_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(12, 2, 10));
+
+pub static SLOW_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(20, 3, 15));
+
+pub static SLOWEST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(25, 3, 15));
+
+pub static ULTRA_ZOPFLI_OPTIONS: Lazy<zopfli::Options> =
+    Lazy::new(|| create_zopfli_options(40, 40, 25));
 
 #[allow(clippy::unwrap_used)]
-pub static FASTEST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(3).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(1).unwrap(),
-    maximum_block_splits: 2,
-});
-
-#[allow(clippy::unwrap_used)]
-pub static FAST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(5).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(2).unwrap(),
-    maximum_block_splits: 5,
-});
-
-#[allow(clippy::unwrap_used)]
-pub static NORMAL_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(12).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(2).unwrap(),
-    maximum_block_splits: 10,
-});
-
-#[allow(clippy::unwrap_used)]
-pub static SLOW_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(20).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(3).unwrap(),
-    maximum_block_splits: 15,
-});
-
-#[allow(clippy::unwrap_used)]
-pub static SLOWEST_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(25).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(3).unwrap(),
-    maximum_block_splits: 15,
-});
-
-#[allow(clippy::unwrap_used)]
-pub static ULTRA_ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| zopfli::Options {
-    iteration_count: NonZeroU64::new(40).unwrap(),
-    iterations_without_improvement: NonZeroU64::new(40).unwrap(),
-    maximum_block_splits: 25,
-});
+fn create_zopfli_options(
+    iteration_count: u64,
+    iterations_without_improvement: u64,
+    maximum_block_splits: u16,
+) -> zopfli::Options {
+    zopfli::Options {
+        iteration_count: NonZeroU64::new(iteration_count).unwrap(),
+        iterations_without_improvement: NonZeroU64::new(iterations_without_improvement).unwrap(),
+        maximum_block_splits,
+    }
+}
 
 pub enum PreCheckResult {
     /// Skip Zopfli entirely
