@@ -19,6 +19,7 @@ use std::sync::Arc;
 use rayon::ThreadPool;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
+use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 pub fn parse_resource_pack_files(
@@ -59,7 +60,20 @@ fn parse_resource_pack_file(
             "parse_resource_pack_files::unknown"
         },
     );
-    if name.ends_with(".json") {
+    if name == "pack.mcmeta" {
+        let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+            Some(value) => value,
+            None => return,
+        };
+        match PackMcmeta::from_json(json_str) {
+            Ok(value) => {
+                pack.pack_mcmeta(value);
+            }
+            Err(e) => {
+                handle_parse_error(logger, pack, name, content, e);
+            }
+        }
+    } else if name.ends_with(".json") {
         match get_type(name) {
             Some("models") => {
                 let (overlay, identifier) = parse_path(name);

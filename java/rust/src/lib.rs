@@ -40,16 +40,12 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                 .i()?;
 
             Options {
-                compression: match comp_val {
-                    0 => Compression::Fastest,
-                    1 => Compression::Fast,
-                    2 => Compression::Normal,
-                    _ => Compression::Best,
-                },
+                compression: Compression::from_u8(comp_val.try_into().unwrap_or(0)),
                 shader_compression: match shader_comp_val {
                     0 => ShaderCompression::None,
                     1 => ShaderCompression::Minify,
-                    _ => ShaderCompression::MinifyAndObfuscate,
+                    2 => ShaderCompression::MinifyAndObfuscate,
+                    _ => ShaderCompression::None
                 },
                 rename_files: env
                     .get_field(&options, jni_str!("renameFiles"), jni_sig!("Z"))?
@@ -64,6 +60,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                     env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
                         .i()? as usize,
                 ),
+                target_version: None // TODO: add support for this
             }
         };
 

@@ -10,6 +10,7 @@ pub mod resource_pack;
 pub mod shader_minifier;
 pub mod usage_checker;
 pub mod utils;
+pub mod overlay_remover;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
@@ -41,6 +42,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use zip::ZipArchive;
+use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 
 pub fn process_zip(
     input_bytes: Vec<u8>,
@@ -94,6 +96,10 @@ pub fn process_zip(
         Arc::clone(&pack),
         &pool,
     );
+
+    if let Some(target_version) = options.target_version {
+        overlay_remover::remove_overlays(logger, &pack, target_version, &pool);
+    }
 
     usage_checker::check_usage(logger, &pack);
 
@@ -277,6 +283,9 @@ fn add_item_to_archive(
         ResourcePackItem::UnknownTexture(o) => {
             writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
         }
+        ResourcePackItem::PackMcmeta(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
+        }
     }?;
     Ok(())
 }
@@ -287,7 +296,8 @@ fn collect_files(
 ) -> Vec<(String, ResourcePackItem)> {
     profile_scope!(std::any::type_name_of_val(&collect_files));
     thread_pool.install(|| {
-        pack.textures
+        let mut files: Vec<_> = pack
+            .textures
             .par_iter()
             .map(|kv| {
                 (
@@ -360,7 +370,14 @@ fn collect_files(
                     ResourcePackItem::Atlas(kv.value().clone()),
                 )
             }))
-            .collect()
+            .collect();
+        if let Some(mcmeta) = pack.pack_mcmeta.lock().unwrap().clone() {
+            files.push((
+                mcmeta.path().to_owned(),
+                ResourcePackItem::PackMcmeta(mcmeta),
+            ));
+        }
+        files
     })
 }
 
@@ -401,6 +418,7 @@ enum ResourcePackItem {
     Sound(Sound),
     SoundDefinitions(SoundDefinitions),
     Atlas(Atlas),
+    PackMcmeta(PackMcmeta),
 }
 
 fn get_type(path: &str) -> Option<&str> {

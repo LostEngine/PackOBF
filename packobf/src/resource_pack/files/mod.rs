@@ -10,3 +10,4 @@ pub mod sound;
 pub mod sound_definitions;
 pub mod atlas;
 pub mod unknowntexture;
+pub mod pack_mcmeta;
