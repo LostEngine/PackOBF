@@ -29,6 +29,7 @@ pub enum Preset {
     Fast,
     Normal,
     Best,
+    Ultra,
 }
 
 impl Options {
@@ -71,6 +72,18 @@ impl Options {
     pub fn best() -> Self {
         Self {
             compression: Compression::Best,
+            shader_compression: ShaderCompression::None,
+            rename_files: true,
+            block_unzipping: true,
+            corrupt_png_files: true,
+            num_threads: None,
+            target_version: None,
+        }
+    }
+
+    pub fn ultra() -> Self {
+        Self {
+            compression: Compression::Ultra,
             shader_compression: ShaderCompression::MinifyAndObfuscate,
             rename_files: true,
             block_unzipping: true,
@@ -86,6 +99,7 @@ impl Options {
             Preset::Fast => Self::fast(),
             Preset::Normal => Self::normal(),
             Preset::Best => Self::best(),
+            Preset::Ultra => Self::ultra(),
         }
     }
 }
