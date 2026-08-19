@@ -67,7 +67,7 @@ impl UnknownTexture {
 
             if let Some(bytes) = cache
                 .with_item(&hash, ItemType::Image, |it| {
-                    (it.compression as u8 >= options.compression.clone() as u8)
+                    (it.compression as u8 >= options.compression as u8)
                         .then(|| it.data.clone())
                 })
                 .flatten()
@@ -100,7 +100,7 @@ impl UnknownTexture {
                     cache.add_item(
                         bytes,
                         &*value,
-                        options.compression.clone() as u8,
+                        options.compression as u8,
                         ItemType::Image,
                     )
                 }
@@ -126,7 +126,7 @@ impl UnknownTexture {
                                     cache.add_item(
                                         bytes,
                                         &*value,
-                                        options.compression.clone() as u8,
+                                        options.compression as u8,
                                         ItemType::Image,
                                     )
                                 }

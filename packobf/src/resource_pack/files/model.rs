@@ -1,5 +1,6 @@
 use crate::resource_pack::identifier::{Identifier, ModelId, TextureId};
 use crate::utils::clean_json_numbers;
+use crate::version;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -23,7 +24,7 @@ pub struct Model {
     pub elements: Option<Vec<Element>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub overrides: Option<Vec<Override>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
     pub gui_light: Option<String>,
 }
 
@@ -58,7 +59,11 @@ impl std::fmt::Display for Model {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = serde_json::to_value(self).map_err(|_| std::fmt::Error)?;
         clean_json_numbers(&mut val);
-        write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(&val).map_err(|_| std::fmt::Error)?
+        )
     }
 }
 
@@ -98,9 +103,6 @@ pub struct Element {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rotation {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub origin: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub x: Option<f32>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -115,7 +117,10 @@ pub struct Rotation {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub angle: Option<f32>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "is_none_or_older_than_1_21_11")]
+    pub origin: Option<[f32; 3]>,
+
+    #[serde(skip_serializing_if = "is_none_or_older_than_1_21_11")]
     pub rescale: Option<bool>,
 }
 
@@ -141,4 +146,12 @@ pub struct Override {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub predicate: Option<Vec<String>>,
     pub model: String,
+}
+
+pub fn is_none_or_newer_than_26_1<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_newer_than_26_1(&())
+}
+
+pub fn is_none_or_older_than_1_21_11<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_older_than_1_21_11(&())
 }

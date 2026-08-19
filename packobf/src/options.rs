@@ -2,6 +2,7 @@ use once_cell::sync::Lazy;
 use std::num::NonZeroU64;
 use clap::{Parser, ValueEnum};
 use libdeflater::{CompressionLvl, Compressor};
+use crate::version::MinecraftVersion;
 
 #[derive(Parser, Clone, Debug)]
 #[group(id = "options")]
@@ -118,21 +119,6 @@ pub enum ShaderCompression {
     None = 0,
     Minify = 1,
     MinifyAndObfuscate = 2,
-}
-
-#[repr(u8)]
-#[derive(ValueEnum, Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum MinecraftVersion {
-    V1_21_1 = 34,
-    V1_21_2 = 42,
-    V1_21_4 = 46,
-    V1_21_5 = 55,
-    V1_21_6 = 63,
-    V1_21_7 = 64,
-    V1_21_9 = 69,
-    V1_21_11 = 75,
-    V26_1 = 84,
-    V26_2 = 88,
 }
 
 pub static ZOPFLI_OPTIONS: Lazy<zopfli::Options> = Lazy::new(|| create_zopfli_options(25, 3, 15));

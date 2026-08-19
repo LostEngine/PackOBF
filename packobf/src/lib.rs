@@ -11,6 +11,7 @@ pub mod shader_minifier;
 pub mod usage_checker;
 pub mod utils;
 pub mod overlay_remover;
+pub mod version;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
@@ -98,7 +99,13 @@ pub fn process_zip(
     );
 
     if let Some(target_version) = options.target_version {
+        version::set_target_version(target_version as u8);
         overlay_remover::remove_overlays(logger, &pack, target_version, &pool);
+        if version::is_older_than_1_21_4(&()) {
+            pack.items.clear(); // Added in 1.21.4
+        }
+    } else {
+        version::set_target_version(0);
     }
 
     usage_checker::check_usage(logger, &pack);

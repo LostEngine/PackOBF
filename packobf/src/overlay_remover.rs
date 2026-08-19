@@ -4,10 +4,10 @@ use dashmap::DashMap;
 use rayon::ThreadPool;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::options::MinecraftVersion;
 use crate::resource_pack::files::pack_mcmeta::{FormatRange, OverlayEntry, PackVersion};
 use crate::resource_pack::pack::ResourcePack;
 use crate::{LogLevel, LogMessage};
+use crate::version::MinecraftVersion;
 
 pub fn remove_overlays(
     logger: &UnboundedSender<LogMessage>,

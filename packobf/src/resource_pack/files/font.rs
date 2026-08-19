@@ -2,6 +2,7 @@ use crate::resource_pack::identifier::{Identifier, TextureIdWithExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::utils::clean_json_numbers;
+use crate::version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Font {
@@ -53,9 +54,9 @@ pub enum FontProvider {
     #[serde(rename = "unihex")]
     Unihex {
         hex_file: String,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        #[serde(default, skip_serializing_if = "is_empty_or_older_than_26_1")]
         size_overrides: Vec<HexSizeOverride>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1")]
         filter: Option<FontFilter>,
     },
 
@@ -102,6 +103,12 @@ fn default_ascent() -> i32 { 7 }
 fn default_height() -> i32 { 8 }
 fn default_size() -> f32 { 11.0 }
 fn default_oversample() -> f32 { 1.5 }
+pub fn is_none_or_older_than_26_1<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_older_than_26_1(&())
+}
+pub fn is_empty_or_older_than_26_1<T>(value: &[T]) -> bool {
+    value.is_empty() || version::is_older_than_26_1(&())
+}
 
 impl Font {
 
