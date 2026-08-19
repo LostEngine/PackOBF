@@ -190,13 +190,7 @@ impl qobject::AppController {
         let cache_opt = if cache_path.is_empty() { None } else { Some(cache_path) };
 
         let options = Options {
-            compression: match self.compression() {
-                0 => Compression::Fastest,
-                1 => Compression::Fast,
-                2 => Compression::Normal,
-                3 => Compression::Best,
-                _ => Compression::Ultra,
-            },
+            compression: Compression::from_u8(self.compression.try_into().unwrap_or(0)),
             shader_compression: match self.shader_compression() {
                 0 => ShaderCompression::None,
                 1 => ShaderCompression::Minify,
@@ -205,7 +199,8 @@ impl qobject::AppController {
             rename_files: *self.rename_files(),
             block_unzipping: *self.block_unzipping(),
             corrupt_png_files: *self.corrupt_png_files(),
-            num_threads: None,
+            num_threads: None, // TODO: Implement this
+            target_version: None // TODO: Implement this
         };
 
         let qt_thread = self.qt_thread();
