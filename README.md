@@ -15,14 +15,16 @@ Usage: packobf_cli [OPTIONS] --input-file <FILE> --output-file <FILE>
 Options:
   -i, --input-file <FILE>                        
   -o, --output-file <FILE>                       
-  -p, --preset <PRESET>                          [possible values: simplest, normal, max]
+  -p, --preset <PRESET>                          [possible values: fastest, fast, normal, best, ultra]
   -l, --log-level <LOG_LEVEL>                    [default: info] [possible values: info, warning, error, none]
       --cache-file <CACHE_FILE>                  
-  -c, --compression <COMPRESSION>                [default: normal] [possible values: simplest, normal, max]
+  -c, --compression <COMPRESSION>                [default: normal] [possible values: fastest, fast, normal, best, ultra]
       --shader-compression <SHADER_COMPRESSION>  [default: minify] [possible values: none, minify, minify-and-obfuscate]
       --rename-files                             
       --block-unzipping                          
       --corrupt-png-files                        
+      --num-threads <NUM_THREADS>                
+      --target-version <TARGET_VERSION>          [possible values: v1-21-1, v1-21-2, v1-21-4, v1-21-5, v1-21-6, v1-21-7, v1-21-9, v1-21-11, v26-1, v26-2]
   -h, --help                                     Print help
   -V, --version                                  Print version
 ```
@@ -32,6 +34,9 @@ Options:
 
 ~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
 because of internet browser restrictions.~~ PackOBF on internet browsers is deprecated.
+
+> [!NOTE]
+> See [OPTIONS](/docs/usage/OPTIONS.md) for more information about each option.
 
 ## List of features
 

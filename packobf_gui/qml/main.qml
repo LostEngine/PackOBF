@@ -311,7 +311,7 @@ ApplicationWindow {
                 text: "Worker threads"
                 Layout.preferredWidth: 250
                 ToolTip.visible: ma6.containsMouse
-                ToolTip.text: "Number of worker threads to use. Set to 0 to use the automatic default."
+                ToolTip.text: "Number of worker threads to use. Zero for automatic."
                 MouseArea {
                     id: ma6; anchors.fill: parent; hoverEnabled: true
                 }
