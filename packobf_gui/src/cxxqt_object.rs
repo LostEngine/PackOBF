@@ -7,6 +7,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QString};
 use packobf::{LogLevel, LogMessage, Progress};
 use packobf::options::{Compression, Options, ShaderCompression};
+use packobf::version::MinecraftVersion;
 
 /// The bridge definition for our QObject
 #[cxx_qt::bridge]
@@ -30,6 +31,8 @@ pub mod qobject {
         #[qproperty(bool, rename_files)]
         #[qproperty(bool, block_unzipping)]
         #[qproperty(bool, corrupt_png_files)]
+        #[qproperty(i32, num_threads)]
+        #[qproperty(i32, target_version)]
         #[qproperty(QString, cache_file_path)]
 
         #[qproperty(QString, progress_text)]
@@ -79,6 +82,8 @@ pub struct AppControllerRust {
     rename_files: bool,
     block_unzipping: bool,
     corrupt_png_files: bool,
+    num_threads: i32,
+    target_version: i32,
     cache_file_path: QString,
 
     progress_text: QString,
@@ -106,11 +111,13 @@ impl Default for AppControllerRust {
     fn default() -> Self {
         Self {
             selected_file: QString::default(),
-            compression: 1, // Normal
+            compression: 2, // Normal
             shader_compression: 0, // None
             rename_files: true,
             block_unzipping: false,
             corrupt_png_files: true,
+            num_threads: 0,
+            target_version: 0,
             cache_file_path: QString::default(),
 
             progress_text: QString::from("Idle"),
@@ -157,6 +164,22 @@ pub fn format_bytes(bytes: usize) -> String {
     }
 }
 
+fn minecraft_version_from_format(format: i32) -> Option<MinecraftVersion> {
+    match format {
+        34 => Some(MinecraftVersion::V1_21_1),
+        42 => Some(MinecraftVersion::V1_21_2),
+        46 => Some(MinecraftVersion::V1_21_4),
+        55 => Some(MinecraftVersion::V1_21_5),
+        63 => Some(MinecraftVersion::V1_21_6),
+        64 => Some(MinecraftVersion::V1_21_7),
+        69 => Some(MinecraftVersion::V1_21_9),
+        75 => Some(MinecraftVersion::V1_21_11),
+        84 => Some(MinecraftVersion::V26_1),
+        88 => Some(MinecraftVersion::V26_2),
+        _ => None,
+    }
+}
+
 impl qobject::AppController {
     pub fn save_output(self: Pin<&mut Self>, path: QString) {
         let output = self.output();
@@ -199,8 +222,10 @@ impl qobject::AppController {
             rename_files: *self.rename_files(),
             block_unzipping: *self.block_unzipping(),
             corrupt_png_files: *self.corrupt_png_files(),
-            num_threads: None, // TODO: Implement this
-            target_version: None // TODO: Implement this
+            num_threads: usize::try_from(*self.num_threads())
+                .ok()
+                .filter(|&threads| threads > 0),
+            target_version: minecraft_version_from_format(*self.target_version()),
         };
 
         let qt_thread = self.qt_thread();

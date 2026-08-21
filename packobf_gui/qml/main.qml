@@ -177,7 +177,7 @@ ApplicationWindow {
                 }
             }
             ComboBox {
-                model: ["Simplest", "Normal", "Max"]
+                model: ["Fastest", "Fast", "Normal", "Best", "Ultra"]
                 currentIndex: appController.compression
                 onCurrentIndexChanged: appController.compression = currentIndex
                 Layout.preferredWidth: 200
@@ -203,6 +203,52 @@ ApplicationWindow {
                 currentIndex: appController.shader_compression
                 onCurrentIndexChanged: appController.shader_compression = currentIndex
                 Layout.preferredWidth: 200
+            }
+        }
+
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
+
+        RowLayout {
+            Label {
+                text: "Target Minecraft version"
+                Layout.preferredWidth: 250
+                ToolTip.visible: ma7.containsMouse
+                ToolTip.text: "Removes parts of the resource pack specific to other Minecraft versions."
+                MouseArea {
+                    id: ma7; anchors.fill: parent; hoverEnabled: true
+                }
+            }
+            ComboBox {
+                id: targetVersionComboBox
+                model: [
+                    {text: "Any", value: 0},
+                    {text: "1.21.1", value: 34},
+                    {text: "1.21.2", value: 42},
+                    {text: "1.21.4", value: 46},
+                    {text: "1.21.5", value: 55},
+                    {text: "1.21.6", value: 63},
+                    {text: "1.21.7", value: 64},
+                    {text: "1.21.9", value: 69},
+                    {text: "1.21.11", value: 75},
+                    {text: "26.1", value: 84},
+                    {text: "26.2", value: 88}
+                ]
+                textRole: "text"
+                currentIndex: indexOfValue(appController.target_version)
+                onActivated: function(index) {
+                    appController.target_version = model[index].value
+                }
+                Layout.preferredWidth: 200
+
+                function indexOfValue(value) {
+                    for (let index = 0; index < model.length; index++) {
+                        if (model[index].value === value)
+                            return index;
+                    }
+                    return 0;
+                }
             }
         }
 
@@ -241,6 +287,41 @@ ApplicationWindow {
                 MouseArea {
                     id: ma5; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton
                 }
+            }
+        }
+
+        MenuSeparator {
+            Layout.fillWidth: true
+        }
+
+        Button {
+            id: advancedOptionsButton
+            text: checked ? "Hide advanced options" : "Advanced options"
+            checkable: true
+        }
+
+        MenuSeparator {
+            visible: advancedOptionsButton.checked
+            Layout.fillWidth: true
+        }
+
+        RowLayout {
+            visible: advancedOptionsButton.checked
+            Label {
+                text: "Worker threads"
+                Layout.preferredWidth: 250
+                ToolTip.visible: ma6.containsMouse
+                ToolTip.text: "Number of worker threads to use. Set to 0 to use the automatic default."
+                MouseArea {
+                    id: ma6; anchors.fill: parent; hoverEnabled: true
+                }
+            }
+            SpinBox {
+                to: 256
+                editable: true
+                value: appController.num_threads
+                onValueModified: appController.num_threads = value
+                Layout.preferredWidth: 200
             }
         }
 

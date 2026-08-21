@@ -7,3 +7,4 @@
   - https://minecraft.wiki/
   - Minecraft release notes
 - Update [`/packobf/src/version.rs`](/packobf/src/version.rs)
+- Update Minecraft versions in [`packobf_gui/qml/main.qml`](/packobf_gui/qml/main.qml) and [`packobf_gui/src/cxxqt_object.rs`](/packobf_gui/src/cxxqt_object.rs)
