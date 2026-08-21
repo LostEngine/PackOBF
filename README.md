@@ -30,7 +30,7 @@ Options:
 ```
 
 > [!TIP]
-> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `simplest` (fastest), `normal` (balanced), `max` (slowest).
+> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fastest`, `fast`, `normal`, `best`, `ultra`.
 
 ~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
 because of internet browser restrictions.~~ PackOBF on internet browsers is deprecated.
