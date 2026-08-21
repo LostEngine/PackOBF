@@ -30,19 +30,19 @@ pub fn get_version() -> u8 {
 
 macro_rules! version_check {
     ($name:ident, $version:ident, <) => {
-        pub fn $name<T>(arg: T) -> bool {
+        pub fn $name<T>(_: T) -> bool {
             // zero check required as if no version is set, it will be 0, which will always be less than any version
             let version = get_version();
             version != 0 && version < MinecraftVersion::$version as u8
         }
     };
     ($name:ident, $version:ident, >) => {
-        pub fn $name<T>(arg: T) -> bool {
+        pub fn $name<T>(_: T) -> bool {
             get_version() > MinecraftVersion::$version as u8 // zero check isn't needed in this case
         }
     };
     ($name:ident, $version1:ident, $version2:ident, <>) => {
-        pub fn $name<T>(arg: T) -> bool {
+        pub fn $name<T>(_: T) -> bool {
             let version = get_version();
             version != 0
             && version < MinecraftVersion::$version1 as u8
