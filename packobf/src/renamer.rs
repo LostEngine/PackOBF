@@ -4,12 +4,11 @@ use crate::resource_pack::files::atlas::{Atlas, Source};
 use crate::resource_pack::files::font::FontProvider;
 use crate::resource_pack::files::model::Model;
 use crate::resource_pack::files::sound::Sound;
-use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping::{self, Mapping};
 use crate::resource_pack::pack::ResourcePack;
 use crate::{profile_scope, LogLevel, LogMessage};
-use serde_json::json;
 use std::collections::HashMap;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -23,30 +22,21 @@ pub fn rename_files(
     rayon::scope(|s| {
         s.spawn(|_| rename_overlays(pack, &mut mapping.overlay_mappings));
         s.spawn(|_| rename_models(pack, &mut mapping.model_mappings, id_counter));
-        s.spawn(|_| rename_textures(logger, &pack, &mut mapping.texture_mappings, id_counter));
+        s.spawn(|_| rename_textures(logger, pack, &mut mapping.texture_mappings, id_counter));
         s.spawn(|_| rename_sounds(pack, &mut mapping.sound_mappings, id_counter));
     });
 }
 
 fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
     profile_scope!(std::any::type_name_of_val(&rename_overlays));
-    let mut count = 0;
-    if let Some(mut mcmeta) = pack.json_files.get_mut("pack.mcmeta") {
-        if let Some(entries) = mcmeta
-            .value_mut()
-            .content
-            .pointer_mut("/overlays/entries")
-            .and_then(|v| v.as_array_mut())
-        {
-            for entry in entries {
-                if let Some(dir) = entry.get_mut("directory") {
-                    let current_name = dir.as_str().map(|s| s.to_string());
-                    if let Some(current_name) = current_name {
-                        let new_name = generate_short_name(count);
-                        *dir = json!(new_name.clone());
-                        mapping.insert(current_name, new_name);
-                        count += 1;
-                    }
+    if let Some(mcmeta) = pack.pack_mcmeta.lock().unwrap().as_mut() {
+
+        if let Some(overlay) = mcmeta.overlays.as_mut() {
+            if let Some(entries) = overlay.entries.as_mut() {
+                for (count, entry) in entries.iter_mut().enumerate() {
+                    let new_name = generate_short_name(count);
+                    mapping.insert(entry.directory.clone(), new_name.clone());
+                    entry.directory = new_name;
                 }
             }
         }
@@ -102,12 +92,12 @@ fn rename_sounds(
 
 fn rename_textures(
     logger: &UnboundedSender<LogMessage>,
-    pack: &&ResourcePack,
+    pack: &ResourcePack,
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_textures));
-    let mut textures: Vec<(String, Texture)> = pack
+    let mut textures: Vec<(String, AssetTexture)> = pack
         .textures
         .iter()
         .map(|entry| (entry.key().clone(), entry.value().clone()))

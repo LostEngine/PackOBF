@@ -26,7 +26,7 @@ use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
@@ -179,7 +179,7 @@ pub fn process_zip(
             });
             match item {
                 ResourcePackItem::Texture(x) => {
-                    x.unknown_texture.optimize(options, logger, &cache);
+                    x.optimize(options, logger, &cache);
                 }
                 ResourcePackItem::UnknownTexture(x) => {
                     x.optimize(options, logger, &cache);
@@ -249,7 +249,7 @@ fn add_item_to_archive(
     match item {
         ResourcePackItem::Texture(o) => writer.add_file(
             name.as_str(),
-            o.unknown_texture.bytes.as_slice(),
+            o.texture.bytes.as_slice(),
             options,
             cache,
         ),
@@ -288,7 +288,7 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::UnknownTexture(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+            writer.add_file(name.as_str(), o.texture.bytes.as_slice(), options, cache)
         }
         ResourcePackItem::PackMcmeta(o) => {
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
@@ -413,7 +413,7 @@ pub enum Progress {
 
 #[derive(Clone, Debug)]
 enum ResourcePackItem {
-    Texture(Texture),
+    Texture(AssetTexture),
     UnknownTexture(UnknownTexture),
     Shader(Shader),
     Json(Json),

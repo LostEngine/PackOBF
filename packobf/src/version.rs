@@ -1,7 +1,6 @@
+use clap::ValueEnum;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::LazyLock;
-use clap::ValueEnum;
-use crate::options::Compression;
 
 #[repr(u8)]
 #[derive(ValueEnum, Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord)]

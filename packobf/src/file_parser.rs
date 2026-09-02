@@ -9,7 +9,7 @@ use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Error;
 use crate::{get_type, parse_path, LogMessage, Progress};
@@ -190,7 +190,7 @@ fn parse_resource_pack_file(
     } else if name.ends_with(".png") {
         if get_type(name) == Some("textures") {
             let (overlay, identifier) = parse_path(name);
-            pack.texture(Texture::new(overlay, identifier, content.to_owned()));
+            pack.texture(AssetTexture::new(overlay, identifier, content.to_owned()));
         } else {
             pack.unknown_texture(UnknownTexture::new(name.as_str(), content.to_owned()))
         }

@@ -43,10 +43,9 @@ impl Model {
     }
 
     pub fn path(&self) -> String {
-        let prefix = if self.overlay.is_empty() {
-            "".to_string()
-        } else {
-            format!("{}/", self.overlay)
+        let prefix = match self.overlay.as_str() {
+            "" => "".to_string(),
+            x => format!("{}/", x),
         };
         format!(
             "{}assets/{}/models/{}.json",

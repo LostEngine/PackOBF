@@ -9,7 +9,7 @@ use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use dashmap::DashMap;
 use std::sync::{Arc, Mutex};
@@ -19,7 +19,7 @@ pub struct ResourcePack {
     pub pack_mcmeta: Arc<Mutex<Option<PackMcmeta>>>,
     pub models: DashMap<String, Model>,
     pub json_files: DashMap<String, Json>,
-    pub textures: DashMap<String, Texture>,
+    pub textures: DashMap<String, AssetTexture>,
     pub unknown_textures: DashMap<String, UnknownTexture>,
     pub shaders: DashMap<String, Shader>,
     pub unknown_files: DashMap<String, ResourcePackFile>,
@@ -44,7 +44,7 @@ impl ResourcePack {
         self.json_files.insert(json.path.to_string(), json);
     }
 
-    pub fn texture(&self, texture: Texture) {
+    pub fn texture(&self, texture: AssetTexture) {
         self.textures.insert(texture.path(), texture);
     }
 
