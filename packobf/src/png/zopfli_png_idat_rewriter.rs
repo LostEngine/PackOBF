@@ -83,6 +83,7 @@ pub fn rewrite_idat_with_zopfli(
             color_type = Some(data[9]);
             interlace_method = Some(data[12]);
 
+            output.extend_from_slice(&input[offset..crc_end]);
         } else if chunk_type == b"IDAT" {
             let chunk_start = offset + 8;
             // See [zlib data format](https://en.wikipedia.org/wiki/Zlib#Data_format).
