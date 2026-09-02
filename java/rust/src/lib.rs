@@ -9,6 +9,7 @@ use jni::{
 use packobf::options::{Compression, Options, ShaderCompression};
 use packobf::{LogMessage, Progress, process_zip};
 use tokio::sync::watch;
+use packobf::version::MinecraftVersion;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
@@ -60,7 +61,8 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                     env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
                         .i()? as usize,
                 ),
-                target_version: None // TODO: add support for this
+                target_version: MinecraftVersion::from_u8(u8::try_from(env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
+                    .i()? as u32).unwrap_or(0))
             }
         };
 

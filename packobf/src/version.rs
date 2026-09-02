@@ -1,6 +1,7 @@
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::LazyLock;
 use clap::ValueEnum;
+use crate::options::Compression;
 
 #[repr(u8)]
 #[derive(ValueEnum, Clone, Debug, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -15,6 +16,24 @@ pub enum MinecraftVersion {
     V1_21_11 = 75,
     V26_1 = 84,
     V26_2 = 88,
+}
+
+impl MinecraftVersion {
+    pub fn from_u8(value: u8) -> Option<Self> {
+        match value {
+            34 => Some(MinecraftVersion::V1_21_1),
+            42 => Some(MinecraftVersion::V1_21_2),
+            46 => Some(MinecraftVersion::V1_21_4),
+            55 => Some(MinecraftVersion::V1_21_5),
+            63 => Some(MinecraftVersion::V1_21_6),
+            64 => Some(MinecraftVersion::V1_21_7),
+            69 => Some(MinecraftVersion::V1_21_9),
+            75 => Some(MinecraftVersion::V1_21_11),
+            84 => Some(MinecraftVersion::V26_1),
+            88 => Some(MinecraftVersion::V26_2),
+            _ => None,
+        }
+    }
 }
 
 pub static TARGET_VERSION: LazyLock<AtomicU8> =

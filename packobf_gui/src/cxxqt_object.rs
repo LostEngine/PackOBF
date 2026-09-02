@@ -164,22 +164,6 @@ pub fn format_bytes(bytes: usize) -> String {
     }
 }
 
-fn minecraft_version_from_format(format: i32) -> Option<MinecraftVersion> {
-    match format {
-        34 => Some(MinecraftVersion::V1_21_1),
-        42 => Some(MinecraftVersion::V1_21_2),
-        46 => Some(MinecraftVersion::V1_21_4),
-        55 => Some(MinecraftVersion::V1_21_5),
-        63 => Some(MinecraftVersion::V1_21_6),
-        64 => Some(MinecraftVersion::V1_21_7),
-        69 => Some(MinecraftVersion::V1_21_9),
-        75 => Some(MinecraftVersion::V1_21_11),
-        84 => Some(MinecraftVersion::V26_1),
-        88 => Some(MinecraftVersion::V26_2),
-        _ => None,
-    }
-}
-
 impl qobject::AppController {
     pub fn save_output(self: Pin<&mut Self>, path: QString) {
         let output = self.output();
@@ -225,7 +209,7 @@ impl qobject::AppController {
             num_threads: usize::try_from(*self.num_threads())
                 .ok()
                 .filter(|&threads| threads > 0),
-            target_version: minecraft_version_from_format(*self.target_version()),
+            target_version: MinecraftVersion::from_u8(u8::try_from(*self.target_version()).unwrap_or(0)),
         };
 
         let qt_thread = self.qt_thread();
