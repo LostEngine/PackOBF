@@ -9,6 +9,7 @@ use jni::{
 use packobf::options::{Compression, Options, ShaderCompression};
 use packobf::{LogMessage, Progress, process_zip};
 use tokio::sync::watch;
+use packobf::version::MinecraftVersion;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
@@ -30,7 +31,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
         };
 
         let options = if options.is_null() {
-            Options::simplest()
+            Options::fastest()
         } else {
             let comp_val = env
                 .get_field(&options, jni_str!("compression"), jni_sig!("I"))?
@@ -40,15 +41,12 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                 .i()?;
 
             Options {
-                compression: match comp_val {
-                    0 => Compression::Simplest,
-                    1 => Compression::Normal,
-                    _ => Compression::Max,
-                },
+                compression: Compression::from_u8(comp_val.try_into().unwrap_or(0)),
                 shader_compression: match shader_comp_val {
                     0 => ShaderCompression::None,
                     1 => ShaderCompression::Minify,
-                    _ => ShaderCompression::MinifyAndObfuscate,
+                    2 => ShaderCompression::MinifyAndObfuscate,
+                    _ => ShaderCompression::None
                 },
                 rename_files: env
                     .get_field(&options, jni_str!("renameFiles"), jni_sig!("Z"))?
@@ -59,6 +57,12 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                 corrupt_png_files: env
                     .get_field(&options, jni_str!("corruptPngFiles"), jni_sig!("Z"))?
                     .z()?,
+                num_threads: Some(
+                    env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
+                        .i()? as usize,
+                ),
+                target_version: MinecraftVersion::from_u8(u8::try_from(env.get_field(&options, jni_str!("numThreads"), jni_sig!("I"))?
+                    .i()? as u32).unwrap_or(0))
             }
         };
 
@@ -119,12 +123,17 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                                 total: t,
                             } => (1, c as i32, t as i32, None),
                             Progress::Parsing { current: s } => (2, 0, 0, Some(s)),
-                            Progress::Building {
+                            Progress::Optimizing {
                                 current: s,
                                 index: i,
                                 total: t,
                             } => (3, i as i32, t as i32, Some(s)),
-                            Progress::Done => (4, 0, 0, None),
+                            Progress::Building {
+                                current: s,
+                                index: i,
+                                total: t,
+                            } => (4, i as i32, t as i32, Some(s)),
+                            Progress::Done => (5, 0, 0, None),
                         };
 
                         let _ = env.with_local_frame(16, |env| {

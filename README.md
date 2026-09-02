@@ -15,23 +15,28 @@ Usage: packobf_cli [OPTIONS] --input-file <FILE> --output-file <FILE>
 Options:
   -i, --input-file <FILE>                        
   -o, --output-file <FILE>                       
-  -p, --preset <PRESET>                          [possible values: simplest, normal, max]
+  -p, --preset <PRESET>                          [possible values: fastest, fast, normal, best, ultra]
   -l, --log-level <LOG_LEVEL>                    [default: info] [possible values: info, warning, error, none]
       --cache-file <CACHE_FILE>                  
-  -c, --compression <COMPRESSION>                [default: normal] [possible values: simplest, normal, max]
+  -c, --compression <COMPRESSION>                [default: normal] [possible values: fastest, fast, normal, best, ultra]
       --shader-compression <SHADER_COMPRESSION>  [default: minify] [possible values: none, minify, minify-and-obfuscate]
       --rename-files                             
       --block-unzipping                          
       --corrupt-png-files                        
+      --num-threads <NUM_THREADS>                
+      --target-version <TARGET_VERSION>          [possible values: v1-21-1, v1-21-2, v1-21-4, v1-21-5, v1-21-6, v1-21-7, v1-21-9, v1-21-11, v26-1, v26-2]
   -h, --help                                     Print help
   -V, --version                                  Print version
 ```
 
 > [!TIP]
-> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `simplest` (fastest), `normal` (balanced), `max` (slowest).
+> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fastest`, `fast`, `normal`, `best`, `ultra`.
 
-Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
-because of internet browser restrictions.
+~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
+because of internet browser restrictions.~~ PackOBF on internet browsers is deprecated.
+
+> [!NOTE]
+> See [OPTIONS](/docs/usage/OPTIONS.md) for more information about each option.
 
 ## List of features
 
@@ -66,58 +71,11 @@ PackOBF is able to parse core shaders, minify them, rename variables and functio
 which might break your shaders, while `minify` does not.
 
 ## License
-PackOBF is an open-source software distributed under the MIT license. See [`LICENSE.md`](LICENSE.md) for complete license.
+PackOBF is open-source software distributed under the MIT license. See [`LICENSE.md`](LICENSE.md) for complete license.
 
 > [!NOTE]
 > No code from any other project has been "stolen" or used as inspiration, all researches were made using public server resource packs and online resources such as [ImHex](https://github.com/werwolv/imhex).
 
 ## How to use the library (for developers)
 
-### Java
-
-Adding the dependency (Gradle)
-###### build.gradle.kts
-```kts
-repositories {
-    maven("https://repo.misieur.me/repository")
-}
-
-dependencies {
-    compileOnly("dev.misieur:packobf:0.2.1")
-}
-```
-
-Using PackOBF
-```java
-...
-import dev.misieur.packobf.PackOBF;
-import dev.misieur.packobf.options.Compression;
-import dev.misieur.packobf.options.Options;
-import dev.misieur.packobf.options.ShaderCompression;
-import dev.misieur.packobf.progress.*;
-...
-    byte[] bytes = /* The byte array of your built resource pack readable by any software */;
-    try {
-        byte[] output = PackOBF.optimizeZip( // Optimize resource pack and returns the new byte array
-            bytes,
-            new Options( // Configure PackOBF
-                    Compression.NORMAL,
-                    ShaderCompression.NONE,
-                    true,
-                    true,
-                    true
-            ),
-            (level, message) -> System.out.println(level.name().toUpperCase(Locale.ROOT) + ": " + message), // Message logger
-            progress -> { // Progress logger (can be used in bossbar for example)
-                switch (progress) {
-                    case IdleProgress p -> System.out.println("Initializing...");
-                    case ReadingZipProgress p -> System.out.println("Reading resource pack... " + p.current() + "/" + p.total());
-                    ...
-                }
-            },
-            Path.of("path/to/cachefile.bin") // Nullable
-    );
-    } catch (IOException e) { // PackOBF will throw a Java exception if it fails to optimize the resource pack
-        e.printStackTrace();
-    }
-```
+See [How to use the library (for developers)](docs/usage/HOW_TO_USE_LIBRARY_DEVS.md)

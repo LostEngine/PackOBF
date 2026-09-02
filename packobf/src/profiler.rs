@@ -15,6 +15,8 @@ pub static PROFILER: LazyLock<ArcSwap<Profiler>> = LazyLock::new(|| ArcSwap::fro
 #[cfg(feature = "profiling")]
 pub struct Stat {
     pub total_ns: AtomicU64,
+    pub min_ns: AtomicU64,
+    pub max_ns: AtomicU64,
     pub calls: AtomicU64,
 }
 
@@ -36,10 +38,14 @@ impl Profiler {
 
         let entry = self.stats.entry(name).or_insert_with(|| Stat {
             total_ns: AtomicU64::new(0),
+            min_ns: AtomicU64::new(nanos),
+            max_ns: AtomicU64::new(nanos),
             calls: AtomicU64::new(0),
         });
 
         entry.total_ns.fetch_add(nanos, Ordering::Relaxed);
+        entry.min_ns.fetch_min(nanos, Ordering::Relaxed);
+        entry.max_ns.fetch_max(nanos, Ordering::Relaxed);
         entry.calls.fetch_add(1, Ordering::Relaxed);
     }
 
@@ -49,9 +55,11 @@ impl Profiler {
             .iter()
             .map(|e| {
                 let total = e.total_ns.load(Ordering::Relaxed);
+                let min = e.min_ns.load(Ordering::Relaxed);
+                let max = e.max_ns.load(Ordering::Relaxed);
                 let calls = e.calls.load(Ordering::Relaxed);
 
-                (*e.key(), total, calls, total as f64 / calls.max(1) as f64)
+                (*e.key(), total, calls, total as f64 / calls.max(1) as f64, min, max)
             })
             .collect::<Vec<_>>();
 
@@ -59,13 +67,15 @@ impl Profiler {
 
         println!("==== PROFILING ====");
 
-        for (name, total, calls, avg) in entries {
+        for (name, total, calls, avg, min, max) in entries {
             println!(
-                "{:<40} total={:>10.2}ms calls={:>8.2} avg={:>10.2}µs",
+                "{:<40} total={:>10.2}ms calls={:>8.2} avg={:>10.5}ms min={:>10.5}ms max={:>10.5}ms",
                 name,
                 total as f64 / 1_000_000.0,
                 calls,
-                avg / 1_000.0
+                avg / 1_000_000.0,
+                min as f64 / 1_000_000.0,
+                max as f64 / 1_000_000.0,
             );
         }
     }
@@ -98,6 +108,6 @@ impl Drop for ScopeTimer {
 macro_rules! profile_scope {
     ($name:expr) => {
         #[cfg(feature = "profiling")]
-        let _profiler_scope = $crate::profiler::profiler::ScopeTimer::new($name);
+        let _profiler_scope = $crate::profiler::ScopeTimer::new($name);
     };
 }

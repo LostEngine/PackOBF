@@ -1,22 +1,25 @@
-use crate::resource_pack::files::model::Model;
-use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
-use crate::resource_pack::files::texture::Texture;
-use dashmap::DashMap;
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
 use crate::resource_pack::files::item::Item;
 use crate::resource_pack::files::json::Json;
+use crate::resource_pack::files::model::Model;
+use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
+use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
+use dashmap::DashMap;
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Debug, Default)]
 pub struct ResourcePack {
+    pub pack_mcmeta: Arc<Mutex<Option<PackMcmeta>>>,
     pub models: DashMap<String, Model>,
     pub json_files: DashMap<String, Json>,
-    pub textures: DashMap<String, Texture>,
+    pub textures: DashMap<String, AssetTexture>,
     pub unknown_textures: DashMap<String, UnknownTexture>,
     pub shaders: DashMap<String, Shader>,
     pub unknown_files: DashMap<String, ResourcePackFile>,
@@ -29,6 +32,10 @@ pub struct ResourcePack {
 }
 
 impl ResourcePack {
+    pub fn pack_mcmeta(&self, pack_mcmeta: PackMcmeta) {
+        self.pack_mcmeta.lock().unwrap().replace(pack_mcmeta);
+    }
+
     pub fn model(&self, model: Model) {
         self.models.insert(model.path(), model);
     }
@@ -37,7 +44,7 @@ impl ResourcePack {
         self.json_files.insert(json.path.to_string(), json);
     }
 
-    pub fn texture(&self, texture: Texture) {
+    pub fn texture(&self, texture: AssetTexture) {
         self.textures.insert(texture.path(), texture);
     }
 

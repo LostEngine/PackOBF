@@ -55,7 +55,7 @@ impl Minifier {
         source: &str,
         rename: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        profile_scope!("minify_shader");
+        profile_scope!(std::any::type_name_of_val(&Minifier::minify));
         let mut ast =
             TranslationUnit::parse(source).map_err(|e| format!("GLSL Parse Error: {}", e))?;
 
@@ -238,11 +238,12 @@ impl VisitorMut for Minifier {
                 false
             };
             if !has_forbidden_qualifier {
-                let name = list.head.name.clone().unwrap().0.to_string();
-
-                if !name.starts_with("gl_") {
-                    if let Some(short) = self.local_mapping.get(&name) {
-                        list.head.name = Some(IdentifierData::from(short.as_str()).into());
+                if let Some(identifier) = list.head.name.clone() {
+                    let name = identifier.0.to_string();
+                    if !name.starts_with("gl_") {
+                        if let Some(short) = self.local_mapping.get(&name) {
+                            list.head.name = Some(IdentifierData::from(short.as_str()).into());
+                        }
                     }
                 }
 

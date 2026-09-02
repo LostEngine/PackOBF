@@ -2,6 +2,7 @@ use crate::resource_pack::identifier::{Identifier, ModelId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use crate::utils::clean_json_numbers;
+use crate::version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Blockstate {
@@ -33,7 +34,7 @@ pub struct BlockModel {
     pub x: i32,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub y: i32,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero_or_older_than_1_21_11")]
     pub z: i32,
 
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -85,6 +86,9 @@ fn default_weight() -> i32 {
 fn is_default_weight(v: &i32) -> bool {
     *v == 1
 }
+fn is_zero_or_older_than_1_21_11(v: &i32) -> bool {
+    *v == 0 || version::is_older_than_1_21_11(&())
+}
 
 impl Blockstate {
     pub fn from_json(
@@ -101,10 +105,9 @@ impl Blockstate {
     }
 
     pub fn path(&self) -> String {
-        let prefix = if self.overlay.is_empty() {
-            "".to_string()
-        } else {
-            format!("{}/", self.overlay)
+        let prefix = match self.overlay.as_str() {
+            "" => "".to_string(),
+            x => format!("{}/", x),
         };
         format!(
             "{}assets/{}/blockstates/{}.json",
