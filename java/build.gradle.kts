@@ -1,6 +1,5 @@
 plugins {
     id("java")
-    id("maven-publish")
     id("com.vanniktech.maven.publish") version "0.37.0"
 }
 
@@ -10,17 +9,6 @@ version = "0.3.0-beta.1"
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
-    }
-    withJavadocJar()
-    withSourcesJar()
-}
-
-publishing {
-    publications {
-        create<MavenPublication>("mavenJava") {
-            artifactId = "packobf"
-            from(components["java"])
-        }
     }
 }
 
@@ -66,8 +54,4 @@ tasks.processResources {
         into("packobf-natives")
     }
     from("../LICENSE.md")
-}
-
-tasks.named("publish") {
-    dependsOn("processResources")
 }
