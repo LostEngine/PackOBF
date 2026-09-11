@@ -3,5 +3,7 @@ target
 
 # keep your zip files!
 **/*.zip
+# PGP private keys
+**/*.gpg
 
 packobf_gui/.qmlls.ini

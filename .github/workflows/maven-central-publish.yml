@@ -1,0 +1,202 @@
+name: Maven Central Publish
+on:
+  release:
+    types: [released, prereleased]
+jobs:
+  license:
+    name: Generate License
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Cache LICENSE.md
+        id: cache-license
+        uses: actions/cache@v4
+        with:
+          path: LICENSE.md
+          key: license-${{ hashFiles('Cargo.lock', 'about.hbs', 'about.toml') }}
+
+      - name: Install cargo-about
+        if: steps.cache-license.outputs.cache-hit != 'true'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: Generate LICENSE.md
+        if: steps.cache-license.outputs.cache-hit != 'true'
+        run: |
+          cargo about generate about.hbs | perl -0777 -pe 's/\s+$/\n/' | tee -a LICENSE.md > /dev/null
+
+      - name: Upload LICENSE.md
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-license
+          path: LICENSE.md
+  build:
+    name: Build (${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    needs: license
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x64 GNU
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: linux-x86_64
+            java-lib: librust.so
+
+          # Linux ARM64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact: linux-aarch64
+            java-lib: librust.so
+
+          # macOS Intel
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: macos-x86_64
+            java-lib: librust.dylib
+
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: macos-aarch64
+            java-lib: librust.dylib
+
+          # Windows x64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: windows-x86_64
+            java-lib: rust.dll
+
+          # Windows ARM64
+          - os: windows-latest
+            target: aarch64-pc-windows-msvc
+            artifact: windows-aarch64
+            java-lib: rust.dll
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1-rust-qt-${{ matrix.qt-version }}-${{ matrix.os }}-${{ matrix.target }}"
+
+      - name: Install cross (linux-aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build
+        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'aarch64-pc-windows-msvc'
+        run: cargo build --release --target ${{ matrix.target }} -p rust
+
+      - name: Build (linux-aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --target ${{ matrix.target }} -p rust
+
+      - name: Build (aarch64-pc-windows-msvc)
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        run: cargo build --release --target ${{ matrix.target }} -p rust
+
+      - name: Download LICENSE.md
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-license
+
+      - name: Prepare Java Native Library
+        run: |
+          rm -rf dist && mkdir -p dist
+          cp target/${{ matrix.target }}/release/${{ matrix.java-lib }} dist/
+          cp LICENSE.md dist/
+
+      - name: Upload Java Native Library
+        uses: actions/upload-artifact@v4
+        with:
+          name: java-lib-${{ matrix.artifact }}
+          path: dist/*
+  publish:
+    name: Release build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm'
+          cache: 'gradle'
+      - name: Download Linux x64
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-linux-x86_64
+          path: artifacts/native/linux-x86_64
+
+      - name: Download Linux ARM64
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-linux-aarch64
+          path: artifacts/native/linux-aarch64
+
+      - name: Download macOS Intel
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-macos-x86_64
+          path: artifacts/native/macos-x86_64
+
+      - name: Download macOS ARM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-macos-aarch64
+          path: artifacts/native/macos-aarch64
+
+      - name: Download Windows x64
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-windows-x86_64
+          path: artifacts/native/windows-x86_64
+
+      - name: Download Windows ARM
+        uses: actions/download-artifact@v4
+        with:
+          name: java-lib-windows-aarch64
+          path: artifacts/native/windows-aarch64
+
+      - name: Copy native libraries
+        run: |
+          mkdir -p java/build/external-natives
+
+          cp -r artifacts/native/linux-x86_64 java/build/external-natives/
+          cp -r artifacts/native/linux-aarch64 java/build/external-natives/
+
+          cp -r artifacts/native/macos-x86_64 java/build/external-natives/
+          cp -r artifacts/native/macos-aarch64 java/build/external-natives/
+
+          cp -r artifacts/native/windows-x86_64 java/build/external-natives/
+          cp -r artifacts/native/windows-aarch64 java/build/external-natives/
+
+      - name: Publish to MavenCentral
+        run: |
+          cd java
+          ./gradlew publishToMavenCentral --no-configuration-cache
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.SIGNING_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.GPG_KEY_CONTENTS }}
