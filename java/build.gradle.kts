@@ -3,7 +3,7 @@ plugins {
     id("maven-publish")
 }
 
-group = "dev.misieur"
+group = "me.misieur"
 version = "0.3.0"
 
 java {
