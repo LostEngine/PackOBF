@@ -4,7 +4,7 @@ use image::{ExtendedColorType, ImageEncoder};
 use crate::profile_scope;
 
 pub fn recover_png(input: &[u8]) -> Result<Vec<u8>, String> {
-    profile_scope!("recover_png");
+    profile_scope!(std::any::type_name_of_val(&recover_png));
     unsafe {
         let mut width: i32 = 0;
         let mut height: i32 = 0;

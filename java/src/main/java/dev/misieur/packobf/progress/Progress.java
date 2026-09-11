@@ -1,6 +1,6 @@
 package dev.misieur.packobf.progress;
 
-public abstract sealed class Progress permits BuildingProgress, DoneProgress, IdleProgress, ParsingProgress, ReadingZipProgress {
+public abstract sealed class Progress permits IdleProgress, ReadingZipProgress, ParsingProgress, OptimizingProgress, BuildingProgress, DoneProgress {
     private State state;
 
     public abstract State state();
@@ -9,8 +9,9 @@ public abstract sealed class Progress permits BuildingProgress, DoneProgress, Id
         IDLE(0),
         READING_ZIP(1),
         PARSING(2),
-        BUILDING(3),
-        DONE(4);
+        OPTIMIZING(3),
+        BUILDING(4),
+        DONE(5);
 
         private final int value;
 

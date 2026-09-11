@@ -1,9 +1,11 @@
 use crate::profile_scope;
 
+/// [PNG Specification, version 3.0](https://www.w3.org/TR/png-3/)
+
 /// This function modifies the PNG CRCs to make them invalid and removes the IEND CRC.
 /// Doing this will break most PNG file readers, but Minecraft doesn't care about CRC.
 pub fn modify_png_crcs(input: &[u8]) -> Result<Vec<u8>, &'static str> {
-    profile_scope!("modify_png_crcs");
+    profile_scope!(std::any::type_name_of_val(&modify_png_crcs));
     const PNG_SIGNATURE: [u8; 8] = [137, 80, 78, 71, 13, 10, 26, 10];
 
     if input.len() < 8 || input[0..8] != PNG_SIGNATURE {

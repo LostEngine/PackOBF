@@ -10,10 +10,12 @@ pub mod resource_pack;
 pub mod shader_minifier;
 pub mod usage_checker;
 pub mod utils;
+pub mod overlay_remover;
+pub mod version;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
-use crate::options::Options;
+use crate::options::{Options, ShaderCompression};
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
@@ -24,20 +26,24 @@ use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::texture::Texture;
+use crate::resource_pack::files::asset_texture::AssetTexture;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
 use crate::resource_pack::pack::ResourcePack;
-use crate::LogLevel::Info;
+use crate::LogLevel::{Info, Warning};
+use dashmap::DashMap;
 use rayon::prelude::*;
-use std::io::{Cursor, Error, Read};
+use rayon::{ThreadPool, ThreadPoolBuilder};
+use std::error::Error;
+use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use zip::ZipArchive;
-use crate::resource_pack::files::unknowntexture::UnknownTexture;
+use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 
 pub fn process_zip(
     input_bytes: Vec<u8>,
@@ -45,10 +51,10 @@ pub fn process_zip(
     progress: Sender<Progress>,
     logger: &UnboundedSender<LogMessage>,
     cache_file: &Option<String>,
-) -> zip::result::ZipResult<Vec<u8>> {
+) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
     let _ = progress.send(Progress::Idle);
     #[cfg(feature = "profiling")]
-    profiler::profiler::PROFILER.store(Arc::new(profiler::profiler::Profiler::new()));
+    profiler::PROFILER.store(Arc::new(profiler::Profiler::new()));
 
     let progress_clone = progress.clone();
     let reader = Cursor::new(&input_bytes);
@@ -80,12 +86,27 @@ pub fn process_zip(
     let id_usage_counter = IdUsageCounter::default();
     mapping::set_id_usage_counter(id_usage_counter);
 
+    let pool = ThreadPoolBuilder::new()
+        .num_threads(options.num_threads.unwrap_or(0))
+        .build()?;
+
     file_parser::parse_resource_pack_files(
         logger,
         &mut entries,
         progress.clone(),
         Arc::clone(&pack),
+        &pool,
     );
+
+    if let Some(target_version) = options.target_version {
+        version::set_target_version(target_version as u8);
+        overlay_remover::remove_overlays(logger, &pack, target_version, &pool);
+        if version::is_older_than_1_21_4(&()) {
+            pack.items.clear(); // Added in 1.21.4
+        }
+    } else {
+        version::set_target_version(0);
+    }
 
     usage_checker::check_usage(logger, &pack);
 
@@ -95,12 +116,11 @@ pub fn process_zip(
     }
     mapping::set_mappings(mapping);
 
-    let mut items = collect_files(pack);
+    let mut items = collect_files(pack, &pool);
 
     let total = items.len();
     let mut output = Cursor::new(Vec::new());
     let writer = OptimizedZipWriter::new(&mut output);
-    let counter = AtomicUsize::new(0);
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
@@ -113,40 +133,92 @@ pub fn process_zip(
             level: Info,
             message: format!("Loading cache from {}", cache),
         });
-        let cache = Cache::load_from_file(cache)?;
-        let _ = logger.send(LogMessage {
-            level: Info,
-            message: format!("Cache loaded: {} items", cache.items.len()),
-        });
+        let cache = match Cache::load_from_file(cache) {
+            Ok(cache) => {
+                let _ = logger.send(LogMessage {
+                    level: Info,
+                    message: format!("Cache loaded: {} items", cache.items.len()),
+                });
+                cache
+            }
+            Err(e) => {
+                let _ = logger.send(LogMessage {
+                    level: Warning,
+                    message: format!("Invalid cache file, creating a new one. Error: {}", e),
+                });
+                Cache {
+                    items: DashMap::new(),
+                }
+            }
+        };
         Some(cache)
     } else {
         None
     };
 
-    items.par_iter_mut().for_each(|(name, item)| {
-        match add_item_to_archive(
-            options, &progress, logger, total, &writer, &counter, &cache, name, item,
-        ) {
-            Ok(_) => {}
-            Err(e) => {
-                let _ = logger.send(LogMessage {
-                    level: LogLevel::Error,
-                    message: format!("Failed to add item to archive: {}", e),
-                });
+    pool.install(|| {
+        let to_optimize: Vec<_> = items
+            .par_iter_mut()
+            .filter(|(_, item)| match item {
+                ResourcePackItem::Texture(_) | ResourcePackItem::UnknownTexture(_) => true,
+                ResourcePackItem::Shader(_) => {
+                    options.shader_compression != ShaderCompression::None
+                }
+                ResourcePackItem::Sound(_) => true,
+                _ => false,
+            })
+            .collect();
+
+        let total_to_optimize = to_optimize.len();
+        let counter = AtomicUsize::new(0);
+        to_optimize.into_par_iter().for_each(|(name, item)| {
+            let _ = progress.send(Progress::Optimizing {
+                current: name.to_string(),
+                index: counter.fetch_add(1, Ordering::Relaxed),
+                total: total_to_optimize,
+            });
+            match item {
+                ResourcePackItem::Texture(x) => {
+                    x.optimize(options, logger, &cache);
+                }
+                ResourcePackItem::UnknownTexture(x) => {
+                    x.optimize(options, logger, &cache);
+                }
+                ResourcePackItem::Shader(x) => {
+                    x.optimize(options, logger);
+                }
+                ResourcePackItem::Sound(x) => {
+                    x.optimize(logger, &cache);
+                }
+                _ => {}
             }
-        }
+        });
+
+        let counter = AtomicUsize::new(0);
+        items.par_iter_mut().for_each(|(name, item)| {
+            match add_item_to_archive(
+                options, &progress, logger, total, &writer, &counter, &cache, name, item,
+            ) {
+                Ok(_) => {}
+                Err(e) => {
+                    let _ = logger.send(LogMessage {
+                        level: LogLevel::Error,
+                        message: format!("Failed to add item to archive: {}", e),
+                    });
+                }
+            }
+        });
     });
 
     writer.finish()?;
 
-    if let Some(cache) = cache {
-        #[allow(clippy::expect_used)] // Should never happen
-        let _ = cache.save_to_file(cache_file.clone().expect("cache_file is None").as_str());
+    if let (Some(cache), Some(cache_path)) = (cache, cache_file.as_deref()) {
+        let _ = cache.save_to_file(cache_path);
     }
 
     let _ = progress.send(Progress::Done);
     #[cfg(feature = "profiling")]
-    profiler::profiler::PROFILER.load().print();
+    profiler::PROFILER.load().print();
     Ok(output.into_inner())
 }
 
@@ -161,34 +233,26 @@ fn add_item_to_archive(
     cache: &Option<Cache>,
     name: &mut String,
     item: &mut ResourcePackItem,
-) -> Result<(), Error> {
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     let _ = progress.send(Progress::Building {
         current: name.to_string(),
         index: counter.fetch_add(1, Ordering::Relaxed),
         total,
     });
     if !name.starts_with("assets/") {
-        let mut parts = name.split('/');
-        let overlay = match parts.next() {
-            Some(overlay) => overlay.to_string(),
-            None => {
-                let _ = logger.send(LogMessage {
-                    level: LogLevel::Error,
-                    message: format!("Invalid file path: {}", name),
-                });
-                return Ok(());
+        if let Some((overlay, rest)) = name.split_once('/') {
+            if let Some(value) = mapping::get_mappings().overlay_mappings.get(overlay) {
+                *name = format!("{value}/{rest}");
             }
-        };
-        if let Some(value) = mapping::get_mappings().overlay_mappings.get(&overlay) {
-            let rest = parts.collect::<Vec<_>>().join("/");
-            *name = format!("{}/{}", value, rest);
         }
     }
     match item {
-        ResourcePackItem::Texture(o) => {
-            o.optimize(options, logger, cache);
-            writer.add_file(name.as_str(), o.unknown_texture.bytes.as_slice(), options, cache)
-        }
+        ResourcePackItem::Texture(o) => writer.add_file(
+            name.as_str(),
+            o.texture.bytes.as_slice(),
+            options,
+            cache,
+        ),
         ResourcePackItem::Shader(o) => {
             o.optimize(options, logger);
             writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
@@ -215,7 +279,6 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::Sound(o) => {
-            o.optimize(logger, cache);
             writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
         }
         ResourcePackItem::SoundDefinitions(o) => {
@@ -225,99 +288,104 @@ fn add_item_to_archive(
             writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
         ResourcePackItem::UnknownTexture(o) => {
-            o.optimize(options, logger, cache);
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
+            writer.add_file(name.as_str(), o.texture.bytes.as_slice(), options, cache)
+        }
+        ResourcePackItem::PackMcmeta(o) => {
+            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
         }
     }?;
     Ok(())
 }
 
-fn collect_files(pack: Arc<ResourcePack>) -> Vec<(String, ResourcePackItem)> {
-    profile_scope!("collect_files");
-    let texture_iter = pack.textures.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Texture(kv.value().clone()),
-        )
-    });
-    let unknown_texture_iter = pack.unknown_textures.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::UnknownTexture(kv.value().clone()),
-        )
-    });
-    let shader_iter = pack.shaders.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Shader(kv.value().clone()),
-        )
-    });
-    let model_iter = pack.models.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Model(kv.value().clone()),
-        )
-    });
-    let json_iter = pack
-        .json_files
-        .par_iter()
-        .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone())));
-    let unknown_iter = pack.unknown_files.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Unknown(kv.value().clone()),
-        )
-    });
-    let blockstate_iter = pack.blockstates.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::BlockStateDefinition(kv.value().clone()),
-        )
-    });
-    let font_iter = pack.fonts.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::FontDefinition(kv.value().clone()),
-        )
-    });
-    let item_iter = pack.items.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::ItemDefinition(kv.value().clone()),
-        )
-    });
-    let sound_iter = pack.sounds.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Sound(kv.value().clone()),
-        )
-    });
-    let sound_definitions_iter = pack.sound_definitions.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::SoundDefinitions(kv.value().clone()),
-        )
-    });
-    let atlas_iter = pack.atlases.par_iter().map(|kv| {
-        (
-            kv.key().clone(),
-            ResourcePackItem::Atlas(kv.value().clone()),
-        )
-    });
-
-    texture_iter
-        .chain(unknown_texture_iter)
-        .chain(shader_iter)
-        .chain(model_iter)
-        .chain(json_iter)
-        .chain(unknown_iter)
-        .chain(blockstate_iter)
-        .chain(font_iter)
-        .chain(item_iter)
-        .chain(sound_iter)
-        .chain(sound_definitions_iter)
-        .chain(atlas_iter)
-        .collect()
+fn collect_files(
+    pack: Arc<ResourcePack>,
+    thread_pool: &ThreadPool,
+) -> Vec<(String, ResourcePackItem)> {
+    profile_scope!(std::any::type_name_of_val(&collect_files));
+    thread_pool.install(|| {
+        let mut files: Vec<_> = pack
+            .textures
+            .par_iter()
+            .map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Texture(kv.value().clone()),
+                )
+            })
+            .chain(pack.unknown_textures.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::UnknownTexture(kv.value().clone()),
+                )
+            }))
+            .chain(pack.shaders.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Shader(kv.value().clone()),
+                )
+            }))
+            .chain(pack.models.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Model(kv.value().clone()),
+                )
+            }))
+            .chain(
+                pack.json_files
+                    .par_iter()
+                    .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone()))),
+            )
+            .chain(pack.unknown_files.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Unknown(kv.value().clone()),
+                )
+            }))
+            .chain(pack.blockstates.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::BlockStateDefinition(kv.value().clone()),
+                )
+            }))
+            .chain(pack.fonts.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::FontDefinition(kv.value().clone()),
+                )
+            }))
+            .chain(pack.items.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::ItemDefinition(kv.value().clone()),
+                )
+            }))
+            .chain(pack.sounds.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Sound(kv.value().clone()),
+                )
+            }))
+            .chain(pack.sound_definitions.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::SoundDefinitions(kv.value().clone()),
+                )
+            }))
+            .chain(pack.atlases.par_iter().map(|kv| {
+                (
+                    kv.key().clone(),
+                    ResourcePackItem::Atlas(kv.value().clone()),
+                )
+            }))
+            .collect();
+        if let Some(mcmeta) = pack.pack_mcmeta.lock().unwrap().clone() {
+            files.push((
+                mcmeta.path().to_owned(),
+                ResourcePackItem::PackMcmeta(mcmeta),
+            ));
+        }
+        files
+    })
 }
 
 #[derive(Clone, Debug)]
@@ -330,6 +398,11 @@ pub enum Progress {
     Parsing {
         current: String,
     },
+    Optimizing {
+        current: String,
+        index: usize,
+        total: usize,
+    },
     Building {
         current: String,
         index: usize,
@@ -340,7 +413,7 @@ pub enum Progress {
 
 #[derive(Clone, Debug)]
 enum ResourcePackItem {
-    Texture(Texture),
+    Texture(AssetTexture),
     UnknownTexture(UnknownTexture),
     Shader(Shader),
     Json(Json),
@@ -352,6 +425,7 @@ enum ResourcePackItem {
     Sound(Sound),
     SoundDefinitions(SoundDefinitions),
     Atlas(Atlas),
+    PackMcmeta(PackMcmeta),
 }
 
 fn get_type(path: &str) -> Option<&str> {
@@ -375,7 +449,7 @@ fn parse_path(path: &str) -> (String, Identifier) {
     let overlay = if path.starts_with("assets/") {
         "".to_string()
     } else {
-        parts.next().unwrap().to_string()
+        parts.next().unwrap_or("").to_string()
     };
 
     parts.next(); // skip assets

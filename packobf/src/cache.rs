@@ -1,36 +1,16 @@
+use crate::options::Compression;
+use crate::profile_scope;
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
 use std::fs::File;
 use std::io;
 use std::io::{BufReader, BufWriter, Read, Write};
 
-use crate::profile_scope;
-
-const MAGIC_NUMBER: [u8; 8] = *b"PACKOBF1";
-pub const VERSION: u16 = 1;
+const MAGIC_NUMBER: [u8; 10] = *b"PACKOBF001"; // Increase version number each time compression is changed (hex number)
 
 pub struct CachedItem {
     pub compression: Compression,
-    pub version: u16,
     pub data: Vec<u8>,
-}
-
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-pub enum Compression {
-    Fastest = 0,
-    Normal = 1,
-    Best = 2,
-}
-
-impl Compression {
-    fn from_u8(value: u8) -> Self {
-        match value {
-            0 => Compression::Fastest,
-            2 => Compression::Best,
-            _ => Compression::Normal,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -63,7 +43,7 @@ pub struct Cache {
 
 impl Cache {
     pub fn save_to_file(&self, path: &str) -> io::Result<()> {
-        profile_scope!("save_to_file::cache");
+        profile_scope!(std::any::type_name_of_val(&Cache::save_to_file));
         let file = File::create(path)?;
         let mut writer = BufWriter::new(file);
 
@@ -85,9 +65,6 @@ impl Cache {
             // Write Compression (1 byte)
             writer.write_all(&[item.compression as u8])?;
 
-            // Write Version (2 bytes)
-            writer.write_all(&item.version.to_le_bytes())?;
-
             // Write Data Length (u64) and Data
             writer.write_all(&(item.data.len() as u64).to_le_bytes())?;
             writer.write_all(&item.data)?;
@@ -98,28 +75,18 @@ impl Cache {
     }
 
     pub fn load_from_file(path: &str) -> io::Result<Self> {
-        profile_scope!("load_from_file::cache");
-        let file = File::open(path);
-        if let Err(e) = file {
-            return if e.kind() == io::ErrorKind::NotFound {
-                Ok(Cache {
-                    items: DashMap::new(),
-                })
-            } else {
-                Err(e)
-            };
-        }
-        let file = file?;
+        profile_scope!(std::any::type_name_of_val(&Cache::load_from_file));
+        let file = File::open(path)?;
         let mut reader = BufReader::new(file);
         let items = DashMap::new();
 
-        let mut magic = [0u8; 8];
+        let mut magic = [0u8; 10];
         reader.read_exact(&mut magic)?;
 
         if magic != MAGIC_NUMBER {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "Not a valid cache file: Magic number mismatch",
+                "Not a valid cache file: Magic number mismatch (may be from a different version of packobf)",
             ));
         }
 
@@ -143,29 +110,20 @@ impl Cache {
             reader.read_exact(&mut comp_byte)?;
             let compression = Compression::from_u8(comp_byte[0]);
 
-            // Read Version
-            let mut ver_bytes = [0u8; 2];
-            reader.read_exact(&mut ver_bytes)?;
-            let version = u16::from_le_bytes(ver_bytes);
-
             // Read Data Length and then the Data
             let mut data_len_bytes = [0u8; 8];
             reader.read_exact(&mut data_len_bytes)?;
-            let data_len = u64::from_le_bytes(data_len_bytes) as usize;
+            let data_len = usize::try_from(u64::from_le_bytes(data_len_bytes)).map_err(|_| {
+                io::Error::new(io::ErrorKind::InvalidData, "Cache entry is too large")
+            })?;
 
             let mut data = vec![0u8; data_len];
             reader.read_exact(&mut data)?;
 
-            if version == VERSION {
-                items.insert(
-                    CachedItemKey { hash, item_type },
-                    CachedItem {
-                        compression,
-                        version,
-                        data,
-                    },
-                );
-            }
+            items.insert(
+                CachedItemKey { hash, item_type },
+                CachedItem { compression, data },
+            );
         }
 
         Ok(Cache { items })
@@ -198,7 +156,6 @@ impl Cache {
             CachedItemKey { hash, item_type },
             CachedItem {
                 compression: Compression::from_u8(compression),
-                version: VERSION,
                 data: data.into(),
             },
         );
@@ -218,7 +175,6 @@ impl Cache {
             },
             CachedItem {
                 compression: Compression::from_u8(compression),
-                version: VERSION,
                 data: data.into(),
             },
         );

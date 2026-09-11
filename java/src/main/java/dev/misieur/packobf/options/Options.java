@@ -1,13 +1,38 @@
 package dev.misieur.packobf.options;
 
-public record Options(Compression compression, ShaderCompression shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles) {
-    public static Options simplest() {
+import dev.misieur.packobf.annotations.NotNull;
+
+import java.util.Optional;
+
+public record Options(@NotNull Compression compression,
+                      @NotNull ShaderCompression shaderCompression,
+                      boolean renameFiles,
+                      boolean blockUnzipping,
+                      boolean corruptPngFiles,
+                      @NotNull Optional<Integer> numThreads,
+                      @NotNull Optional<MinecraftVersion> targetVersion
+) {
+    public static Options fastest() {
         return new Options(
-                Compression.SIMPLEST,
+                Compression.FASTEST,
                 ShaderCompression.NONE,
                 false,
                 false,
-                false
+                false,
+                Optional.empty(),
+                Optional.empty()
+        );
+    }
+
+    public static Options fast() {
+        return new Options(
+                Compression.FAST,
+                ShaderCompression.NONE,
+                false,
+                false,
+                false,
+                Optional.empty(),
+                Optional.empty()
         );
     }
 
@@ -17,18 +42,35 @@ public record Options(Compression compression, ShaderCompression shaderCompressi
                 ShaderCompression.NONE,
                 false,
                 false,
-                false
+                false,
+                Optional.empty(),
+                Optional.empty()
         );
     }
 
 
-    public static Options max() {
+    public static Options best() {
         return new Options(
-                Compression.MAX,
+                Compression.BEST,
+                ShaderCompression.NONE,
+                true,
+                true,
+                true,
+                Optional.empty(),
+                Optional.empty()
+        );
+    }
+
+
+    public static Options ultra() {
+        return new Options(
+                Compression.ULTRA,
                 ShaderCompression.MINIFY_AND_OBFUSCATE,
                 true,
                 true,
-                true
+                true,
+                Optional.empty(),
+                Optional.empty()
         );
     }
 }

@@ -2,19 +2,6 @@ use strum_macros::{Display, EnumString};
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
-/**
-To build these files from the latest version of Minecraft, first download the folder you want from https://mcasset.cloud/ (recommended)
-Then execute the following command in this folder:
-```bash
-find . -type f -name "*.ext" > files.txt && sed -i 's|^\./||' files.txt && sort files.txt
-```
-**replace "*.ext" with the correct extension (e.g. ".png" for textures)**
-
-Then copy the `files.txt` file into the right file in this folder. (e.g. `minecraft/textures.txt`)
-
-*mcasset.cloud may generate JSON files named _list.json or _all.json. You will have to remove them manually if using `-name "*.json"`.*
-*/
-// Minecraft 26.1
 pub fn is_in_models(input: &str) -> bool {
     MODELS.contains(input)
 }

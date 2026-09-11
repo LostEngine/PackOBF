@@ -1,6 +1,9 @@
 use crate::resource_pack::identifier::{Identifier, ModelId};
 use crate::utils::clean_json_numbers;
+use crate::version;
 use serde::{Deserialize, Serialize};
+
+/// https://github.com/SpyglassMC/vanilla-mcdoc/blob/main/java/assets/item_definition.mcdoc
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Item {
@@ -11,9 +14,12 @@ pub struct Item {
 
     #[serde(default = "default_true", skip_serializing_if = "is_true")]
     pub hand_animation_on_swap: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[serde(default, skip_serializing_if = "is_false_or_older_than_1_21_6")]
     pub oversized_in_gui: bool,
-    #[serde(default = "default_one", skip_serializing_if = "is_one")]
+    #[serde(
+        default = "default_one",
+        skip_serializing_if = "is_one_or_older_than_1_21_11"
+    )]
     pub swap_animation_scale: f32,
     pub model: Model,
 }
@@ -26,13 +32,13 @@ pub enum Model {
         model: ModelId,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tints: Vec<TintSource>,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "composite", alias = "minecraft:composite")]
     Composite {
         models: Vec<Model>,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "condition", alias = "minecraft:condition")]
@@ -40,7 +46,7 @@ pub enum Model {
         property: String,
         on_true: Box<Model>,
         on_false: Box<Model>,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -51,7 +57,7 @@ pub enum Model {
         cases: Vec<SelectCase>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Model>>,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -64,7 +70,7 @@ pub enum Model {
         entries: Vec<RangeEntry>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Model>>,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -73,7 +79,7 @@ pub enum Model {
     Special {
         base: ModelId,
         model: SpecialModelData,
-        #[serde(skip_serializing_if = "Option::is_none", flatten)]
+        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "empty", alias = "minecraft:empty")]
@@ -104,9 +110,7 @@ pub struct FullTransformation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Quaternion {
     List { quaternion: [f32; 4] },
-    Object {
-        quaternion: FullQuaternion
-    },
+    Object { quaternion: FullQuaternion },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -157,21 +161,30 @@ pub enum TintSource {
 pub enum SpecialModelData {
     #[serde(rename = "banner", alias = "minecraft:banner")]
     Banner {
-        #[serde(default = "default_ground")]
+        #[serde(
+            default = "default_ground",
+            skip_serializing_if = "version::is_older_than_26_1"
+        )]
         attachment: String,
         color: String,
     },
     #[serde(rename = "bed", alias = "minecraft:bed")]
-    Bed { part: String, texture: Identifier }, // bed atlas
+    Bed {
+        #[serde(skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
+        part: String,
+        #[serde(skip_serializing_if = "version::is_newer_than_26_1")]
+        texture: Identifier
+    },
+    // bed atlas
     #[serde(rename = "bell", alias = "minecraft:bell")]
     Bell {},
     #[serde(rename = "book", alias = "minecraft:book")]
     Book {
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "version::is_older_than_26_1")]
         open_angle: f32,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "version::is_older_than_26_1")]
         page1: f32,
-        #[serde(default)]
+        #[serde(default, skip_serializing_if = "version::is_older_than_26_1")]
         page2: f32,
     },
     #[serde(rename = "conduit", alias = "minecraft:conduit")]
@@ -179,7 +192,7 @@ pub enum SpecialModelData {
     #[serde(rename = "chest", alias = "minecraft:chest")]
     Chest {
         texture: Identifier, // chest atlas
-        #[serde(default = "default_single")]
+        #[serde(default = "default_single", skip_serializing_if = "version::is_older_than_26_1")]
         chest_type: String,
         #[serde(default)]
         openness: f32,
@@ -195,7 +208,10 @@ pub enum SpecialModelData {
     #[serde(rename = "decorated_pot", alias = "minecraft:decorated_pot")]
     DecoratedPot {},
     #[serde(rename = "end_cube", alias = "minecraft:end_cube")]
-    EndCube { effect: String },
+    EndCube {
+        #[serde(skip_serializing_if = "version::is_older_than_26_1")]
+        effect: String
+    },
     #[serde(rename = "head", alias = "minecraft:head")]
     Head {
         kind: String, // without textures/entity/ prefix and .png suffix
@@ -213,23 +229,25 @@ pub enum SpecialModelData {
         texture: String,
         #[serde(default)]
         openness: f32,
+        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        orientation: Option<String>,
     },
     #[serde(rename = "standing_sign", alias = "minecraft:standing_sign")]
     StandingSign {
-        #[serde(default = "default_ground")]
+        #[serde(default = "default_ground", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
         attachment: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
         wood_type: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
         texture: Option<Identifier>, // signs atlas
     },
     #[serde(rename = "hanging_sign", alias = "minecraft:hanging_sign")]
     HangingSign {
-        #[serde(default = "default_ceiling_middle")]
+        #[serde(default = "default_ceiling_middle", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
         attachment: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
         wood_type: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
+        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
         texture: Option<Identifier>, // signs atlas
     },
     #[serde(rename = "trident", alias = "minecraft:trident")]
@@ -260,6 +278,22 @@ fn default_single() -> String {
     "single".to_string()
 }
 
+pub fn is_false_or_older_than_1_21_6(value: &bool) -> bool {
+    !*value || version::is_older_than_1_21_4(&())
+}
+
+pub fn is_one_or_older_than_1_21_11(f: &f32) -> bool {
+    (*f - 1.0).abs() < f32::EPSILON || version::is_older_than_1_21_11(&())
+}
+
+pub fn is_none_or_older_than_26_1<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_older_than_26_1(&())
+}
+
+pub fn is_none_or_newer_than_26_1<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_newer_than_26_1(&())
+}
+
 impl std::fmt::Display for Item {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut val = serde_json::to_value(self).map_err(|_| std::fmt::Error)?;
@@ -287,10 +321,9 @@ impl Item {
     }
 
     pub fn path(&self) -> String {
-        let prefix = if self.overlay.is_empty() {
-            "".to_string()
-        } else {
-            format!("{}/", self.overlay)
+        let prefix = match self.overlay.as_str() {
+            "" => "".to_string(),
+            x => format!("{}/", x),
         };
         format!(
             "{}assets/{}/items/{}.json",

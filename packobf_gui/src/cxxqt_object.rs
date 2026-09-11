@@ -7,6 +7,7 @@ use cxx_qt::CxxQtType;
 use cxx_qt_lib::{QByteArray, QString};
 use packobf::{LogLevel, LogMessage, Progress};
 use packobf::options::{Compression, Options, ShaderCompression};
+use packobf::version::MinecraftVersion;
 
 /// The bridge definition for our QObject
 #[cxx_qt::bridge]
@@ -30,6 +31,8 @@ pub mod qobject {
         #[qproperty(bool, rename_files)]
         #[qproperty(bool, block_unzipping)]
         #[qproperty(bool, corrupt_png_files)]
+        #[qproperty(i32, num_threads)]
+        #[qproperty(i32, target_version)]
         #[qproperty(QString, cache_file_path)]
 
         #[qproperty(QString, progress_text)]
@@ -79,6 +82,8 @@ pub struct AppControllerRust {
     rename_files: bool,
     block_unzipping: bool,
     corrupt_png_files: bool,
+    num_threads: i32,
+    target_version: i32,
     cache_file_path: QString,
 
     progress_text: QString,
@@ -106,11 +111,13 @@ impl Default for AppControllerRust {
     fn default() -> Self {
         Self {
             selected_file: QString::default(),
-            compression: 1, // Normal
+            compression: 2, // Normal
             shader_compression: 0, // None
             rename_files: true,
             block_unzipping: false,
             corrupt_png_files: true,
+            num_threads: 0,
+            target_version: 0,
             cache_file_path: QString::default(),
 
             progress_text: QString::from("Idle"),
@@ -190,11 +197,7 @@ impl qobject::AppController {
         let cache_opt = if cache_path.is_empty() { None } else { Some(cache_path) };
 
         let options = Options {
-            compression: match self.compression() {
-                0 => Compression::Simplest,
-                1 => Compression::Normal,
-                _ => Compression::Max,
-            },
+            compression: Compression::from_u8(self.compression.try_into().unwrap_or(0)),
             shader_compression: match self.shader_compression() {
                 0 => ShaderCompression::None,
                 1 => ShaderCompression::Minify,
@@ -203,6 +206,10 @@ impl qobject::AppController {
             rename_files: *self.rename_files(),
             block_unzipping: *self.block_unzipping(),
             corrupt_png_files: *self.corrupt_png_files(),
+            num_threads: usize::try_from(*self.num_threads())
+                .ok()
+                .filter(|&threads| threads > 0),
+            target_version: MinecraftVersion::from_u8(u8::try_from(*self.target_version()).unwrap_or(0)),
         };
 
         let qt_thread = self.qt_thread();
@@ -241,6 +248,7 @@ impl qobject::AppController {
                         Progress::Idle => "Idle".to_string(),
                         Progress::ReadingZip { current, total } => format!("Reading ZIP ({}/{})", current, total),
                         Progress::Parsing { current } => format!("Parsing {}", current),
+                        Progress::Optimizing { current, index, total } => format!("Optimizing ({}/{}) {}", index, total, current),
                         Progress::Building { current, index, total } => format!("Building ({}/{}) {}", index, total, current),
                         Progress::Done => "Done".to_string(),
                     };

@@ -32,6 +32,7 @@ struct Args {
 static LOOKING_GLASS: Emoji<'_, '_> = Emoji("🔍 ", "");
 static TRUCK: Emoji<'_, '_> = Emoji("🚚 ", "");
 static CLIP: Emoji<'_, '_> = Emoji("🔗 ", "");
+static OPTIMIZING: Emoji<'_, '_> = Emoji("🚀 ", "");
 static BUILDING: Emoji<'_, '_> = Emoji("⚒️ ", "");
 static SPARKLE: Emoji<'_, '_> = Emoji("✨ ", ":-)");
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "OK ");
@@ -59,7 +60,7 @@ async fn main() {
         DecimalBytes(bytes.len() as u64),
         DecimalBytes(input_size as u64),
         DecimalBytes(bytes.len().abs_diff(input_size) as u64),
-        100.0 - ratio * 100.0,
+        (100.0 - ratio * 100.0).abs(),
         if bytes.len() < input_size {
             "smaller"
         } else {
@@ -77,7 +78,7 @@ pub async fn run_progress_loop(
     let global_started = Instant::now();
     let mut stage_started = Instant::now();
     let mut current_pb: Option<ProgressBar> = None;
-    // 0: Idle, 1: Reading, 2: Parsing, 4: Building
+    // 1: Idle, 2: Reading, 3: Parsing, 4: Optimizing, 5: Building
     let mut current_stage: u8 = 0;
 
     let clear_current = |pb: &mut Option<ProgressBar>| {
@@ -136,7 +137,7 @@ pub async fn run_progress_loop(
                 if current_stage != 1 {
                     println!(
                         "{} {} Initializing...",
-                        style("[1/4]").bold().dim(),
+                        style("[1/5]").bold().dim(),
                         LOOKING_GLASS
                     );
                     current_stage = 1;
@@ -150,7 +151,7 @@ pub async fn run_progress_loop(
                     clear_current(&mut current_pb);
                     println!(
                         "{} {} Reading archive...",
-                        style("[2/4]").bold().dim(),
+                        style("[2/5]").bold().dim(),
                         TRUCK
                     );
                     current_stage = 2;
@@ -160,7 +161,7 @@ pub async fn run_progress_loop(
                 let pb = current_pb.get_or_insert_with(|| {
                     let p = ProgressBar::new(total as u64);
                     p.set_style(bar_style.clone());
-                    p.set_prefix("[2/4]");
+                    p.set_prefix("[2/5]");
                     p
                 });
                 if pb.position() < current as u64 {
@@ -176,12 +177,12 @@ pub async fn run_progress_loop(
                     clear_current(&mut current_pb);
                     println!(
                         "{} {} Parsing resource files...",
-                        style("[3/4]").bold().dim(),
+                        style("[3/5]").bold().dim(),
                         CLIP
                     );
                     let pb = ProgressBar::new_spinner();
                     pb.set_style(spinner_style.clone());
-                    pb.set_prefix("[3/4]");
+                    pb.set_prefix("[3/5]");
                     current_pb = Some(pb);
                     current_stage = 3;
                     stage_started = Instant::now();
@@ -193,7 +194,7 @@ pub async fn run_progress_loop(
                 }
             }
 
-            Progress::Building {
+            Progress::Optimizing {
                 current,
                 index,
                 total,
@@ -203,9 +204,9 @@ pub async fn run_progress_loop(
 
                     clear_current(&mut current_pb);
                     println!(
-                        "{} {} Building resource pack...",
-                        style("[4/4]").bold().dim(),
-                        BUILDING
+                        "{} {} Optimizing resource pack...",
+                        style("[4/5]").bold().dim(),
+                        OPTIMIZING
                     );
                     current_stage = 4;
                     stage_started = Instant::now();
@@ -214,7 +215,37 @@ pub async fn run_progress_loop(
                 let pb = current_pb.get_or_insert_with(|| {
                     let p = ProgressBar::new(total as u64);
                     p.set_style(bar_style.clone());
-                    p.set_prefix("[4/4]");
+                    p.set_prefix("[4/5]");
+                    p
+                });
+                if pb.position() < index as u64 {
+                    pb.set_position(index as u64);
+                }
+                pb.set_message(format!("File: {}", current));
+            }
+
+            Progress::Building {
+                current,
+                index,
+                total,
+            } => {
+                if current_stage != 5 {
+                    print_finished_stage(&mut current_pb, "Optimizing Complete", stage_started);
+
+                    clear_current(&mut current_pb);
+                    println!(
+                        "{} {} Building resource pack...",
+                        style("[5/5]").bold().dim(),
+                        BUILDING
+                    );
+                    current_stage = 5;
+                    stage_started = Instant::now();
+                }
+
+                let pb = current_pb.get_or_insert_with(|| {
+                    let p = ProgressBar::new(total as u64);
+                    p.set_style(bar_style.clone());
+                    p.set_prefix("[5/5]");
                     p
                 });
                 if pb.position() < index as u64 {

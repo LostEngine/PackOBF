@@ -34,7 +34,7 @@ impl Sound {
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
     ) {
-        profile_scope!("optimize::sound");
+        profile_scope!(std::any::type_name_of_val(&Sound::optimize));
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
             sha256.update(self.bytes.as_slice());
@@ -90,10 +90,9 @@ impl Sound {
     }
 
     pub fn path(&self) -> String {
-        let prefix = if self.overlay.is_empty() {
-            "".to_string()
-        } else {
-            format!("{}/", self.overlay)
+        let prefix = match self.overlay.as_str() {
+            "" => "".to_string(),
+            x => format!("{}/", x),
         };
         format!(
             "{}assets/{}/sounds/{}.ogg",
