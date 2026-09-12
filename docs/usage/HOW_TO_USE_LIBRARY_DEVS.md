@@ -9,7 +9,7 @@ Adding the dependency (Gradle)
 ###### build.gradle.kts
 ```kts
 repositories {
-    maven("https://repo.misieur.me/repository")
+    mavenCentral()
 }
 
 dependencies {
