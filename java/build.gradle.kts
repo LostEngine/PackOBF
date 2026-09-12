@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "me.misieur"
-version = "0.3.0-beta.1"
+version = "0.3.0-beta.2"
 
 java {
     toolchain {

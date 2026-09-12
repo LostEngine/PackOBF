@@ -74,31 +74,9 @@ public class Native {
         extracted.toFile().setExecutable(true);
 
         System.load(extracted.toAbsolutePath().toString());
-        registerCleanup(tempDir);
+        extracted.toFile().deleteOnExit();
+        tempDir.toFile().deleteOnExit();
         enabled = true;
-    }
-
-    private static void registerCleanup(Path tempDir) {
-        Runtime.getRuntime().addShutdownHook(Thread.ofPlatform().name("packobf-native-lib-cleanup").unstarted(() -> {
-            try {
-                Files.walkFileTree(tempDir, new SimpleFileVisitor<>() {
-                    @Override
-                    public FileVisitResult visitFile(Path file, BasicFileAttributes attrs)
-                            throws IOException {
-                        Files.deleteIfExists(file);
-                        return FileVisitResult.CONTINUE;
-                    }
-
-                    @Override
-                    public FileVisitResult postVisitDirectory(Path dir, IOException exc)
-                            throws IOException {
-                        Files.deleteIfExists(dir);
-                        return FileVisitResult.CONTINUE;
-                    }
-                });
-            } catch (IOException ignored) {
-            }
-        }));
     }
 
     enum OS {
