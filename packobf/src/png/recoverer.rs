@@ -23,16 +23,22 @@ pub fn recover_png(input: &[u8]) -> Result<Vec<u8>, String> {
             return Err("stb_image could not recover any pixels from this file.".to_string());
         }
 
-        let byte_count = (width * height * channels) as usize;
-        let raw_pixels = std::slice::from_raw_parts(pixel_ptr, byte_count).to_vec();
+        struct StbGuard(*mut std::ffi::c_void);
+        impl Drop for StbGuard {
+            fn drop(&mut self) {
+                unsafe { stb_image::stb_image::stbi_image_free(self.0) };
+            }
+        }
+        let _guard = StbGuard(pixel_ptr as *mut _);
 
-        stb_image::stb_image::stbi_image_free(pixel_ptr as *mut _);
+        let byte_count = (width * height * channels) as usize;
+        let raw_pixels: &[u8] = std::slice::from_raw_parts(pixel_ptr, byte_count);
 
         rebuild_png(raw_pixels, width as u32, height as u32, channels)
     }
 }
 
-fn rebuild_png(pixels: Vec<u8>, w: u32, h: u32, channels: i32) -> Result<Vec<u8>, String> {
+fn rebuild_png(pixels: &[u8], w: u32, h: u32, channels: i32) -> Result<Vec<u8>, String> {
     let mut output = Vec::new();
     let color_type = match channels {
         1 => ExtendedColorType::L8,
@@ -48,7 +54,7 @@ fn rebuild_png(pixels: Vec<u8>, w: u32, h: u32, channels: i32) -> Result<Vec<u8>
         FilterType::Adaptive,
     );
     encoder
-        .write_image(&pixels, w, h, color_type)
+        .write_image(pixels, w, h, color_type)
         .map_err(|e| e.to_string())?;
 
     Ok(output)
