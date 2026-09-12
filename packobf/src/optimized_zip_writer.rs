@@ -79,12 +79,6 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
 
         let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
 
-        // Check the cache again after we get the lock
-        let re_check = self.content_cache.get(&hash).map(|r| r.clone());
-        if let Some(cached_data) = re_check {
-            return self.record_entry(&mut inner, filename, cached_data);
-        }
-
         // Record the precise start offset for the Local File Header
         let header_offset = inner.writer.stream_position()? as u32;
 
@@ -115,13 +109,13 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         };
 
         // Insert into the hashmap so future identical files point here
-        self.content_cache.insert(hash, new_cache.clone());
         inner.cd_entries.push(CentralDirectoryEntry {
             filename: filename.to_string(),
             compression_method: new_cache.compression_method,
             compressed_size: new_cache.compressed_size,
             header_offset: new_cache.header_offset,
         });
+        self.content_cache.insert(hash, new_cache);
 
         Ok(())
     }

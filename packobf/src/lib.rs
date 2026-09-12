@@ -45,6 +45,10 @@ use tokio::sync::watch::Sender;
 use zip::ZipArchive;
 use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 pub fn process_zip(
     input_bytes: Vec<u8>,
     options: &Options,
@@ -52,34 +56,13 @@ pub fn process_zip(
     logger: &UnboundedSender<LogMessage>,
     cache_file: &Option<String>,
 ) -> Result<Vec<u8>, Box<dyn Error + Send + Sync>> {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
     let _ = progress.send(Progress::Idle);
     #[cfg(feature = "profiling")]
     profiler::PROFILER.store(Arc::new(profiler::Profiler::new()));
 
-    let progress_clone = progress.clone();
-    let reader = Cursor::new(&input_bytes);
-    let mut archive = ZipArchive::new(reader)?;
-
-    let len = archive.len();
-    let mut entries = Vec::with_capacity(len);
-
-    for i in 0..len {
-        let _ = progress_clone.send(Progress::ReadingZip {
-            current: i,
-            total: len,
-        });
-        let mut file = archive.by_index(i)?;
-
-        if file.is_dir() {
-            continue;
-        }
-
-        let name = file.name().to_string();
-        let mut content = Vec::with_capacity(file.size() as usize);
-        file.read_to_end(&mut content)?;
-
-        entries.push((name, content));
-    }
+    let entries = read_zip_entries(input_bytes, &progress)?;
 
     let pack = Arc::new(ResourcePack::default());
 
@@ -92,7 +75,7 @@ pub fn process_zip(
 
     file_parser::parse_resource_pack_files(
         logger,
-        &mut entries,
+        entries,
         progress.clone(),
         Arc::clone(&pack),
         &pool,
@@ -124,7 +107,7 @@ pub fn process_zip(
 
     if options.block_unzipping {
         // Add this file first to make tools crash before they can read the data
-        writer.add_file("assets\0", Vec::new().as_slice(), options, &None)?;
+        writer.add_file("assets\0", &[], options, &None)?;
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
@@ -197,7 +180,7 @@ pub fn process_zip(
         let counter = AtomicUsize::new(0);
         items.par_iter_mut().for_each(|(name, item)| {
             match add_item_to_archive(
-                options, &progress, logger, total, &writer, &counter, &cache, name, item,
+                options, &progress, total, &writer, &counter, &cache, name, item,
             ) {
                 Ok(_) => {}
                 Err(e) => {
@@ -226,7 +209,6 @@ pub fn process_zip(
 fn add_item_to_archive(
     options: &Options,
     progress: &Sender<Progress>,
-    logger: &UnboundedSender<LogMessage>,
     total: usize,
     writer: &OptimizedZipWriter<&mut Cursor<Vec<u8>>>,
     counter: &AtomicUsize,
@@ -254,7 +236,6 @@ fn add_item_to_archive(
             cache,
         ),
         ResourcePackItem::Shader(o) => {
-            o.optimize(options, logger);
             writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
         }
         ResourcePackItem::Json(o) => writer.add_file(
@@ -295,6 +276,37 @@ fn add_item_to_archive(
         }
     }?;
     Ok(())
+}
+
+fn read_zip_entries(
+    input_bytes: Vec<u8>,
+    progress: &Sender<Progress>,
+) -> Result<Vec<(String, Vec<u8>)>, Box<dyn Error + Send + Sync>> {
+    let reader = Cursor::new(input_bytes);
+    let mut archive = ZipArchive::new(reader)?;
+
+    let len = archive.len();
+    let mut entries = Vec::with_capacity(len);
+
+    for i in 0..len {
+        let _ = progress.send(Progress::ReadingZip {
+            current: i,
+            total: len,
+        });
+        let mut file = archive.by_index(i)?;
+
+        if file.is_dir() {
+            continue;
+        }
+
+        let name = file.name().to_string();
+        let mut content = Vec::with_capacity(file.size() as usize);
+        file.read_to_end(&mut content)?;
+
+        entries.push((name, content));
+    }
+
+    Ok(entries)
 }
 
 fn collect_files(
@@ -429,40 +441,33 @@ enum ResourcePackItem {
 }
 
 fn get_type(path: &str) -> Option<&str> {
-    // TODO: if the overlay is assets do something
+    let mut parts = path.split('/');
     if path.starts_with("assets/") {
-        path.split('/').nth(2)
+        parts.nth(2)
+    } else if parts.nth(2) == Some("assets") {
+        parts.next()
     } else {
-        if path.split('/').nth(2) == Some("assets") {
-            path.split('/').nth(3)
-        } else {
-            // If the asset's path does not contain `assets` after its overlay, we have to skip it. (e.g. `overlay/abc/textures/block/stone.png`)
-            None
-        }
+        None
     }
 }
 
 fn parse_path(path: &str) -> (String, Identifier) {
-    let mut parts = path.split('/');
-
-    // TODO: do something better
-    let overlay = if path.starts_with("assets/") {
-        "".to_string()
+    let (overlay, rem) = if path.starts_with("assets/") {
+        ("", path)
     } else {
-        parts.next().unwrap_or("").to_string()
+        let mut parts = path.splitn(2, '/');
+        (parts.next().unwrap_or(""), parts.next().unwrap_or(""))
     };
 
+    let mut parts = rem.splitn(4, '/');
     parts.next(); // skip assets
-
-    let namespace = parts.next().unwrap_or("").to_string();
-
+    let namespace = parts.next().unwrap_or("");
     parts.next(); // skip type
+    let rest = parts.next().unwrap_or("");
 
-    let rest = parts.collect::<Vec<_>>().join("/");
+    let (path, _) = rest.rsplit_once('.').unwrap_or((rest, ""));
 
-    let (path, _) = rest.rsplit_once('.').unwrap_or(("", ""));
-
-    (overlay, Identifier::new(namespace, path.to_string()))
+    (overlay.to_string(), Identifier::new(namespace.to_string(), path.to_string()))
 }
 
 #[derive(Clone, Debug)]
@@ -476,4 +481,56 @@ pub enum LogLevel {
     Info = 0,
     Warning = 1,
     Error = 2,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_get_type() {
+        assert_eq!(
+            get_type("assets/minecraft/textures/block/stone.png"),
+            Some("textures")
+        );
+        assert_eq!(
+            get_type("assets/minecraft/models/item/tool.json"),
+            Some("models")
+        );
+        assert_eq!(
+            get_type("overlay_1/assets/minecraft/textures/block/dirt.png"),
+            Some("textures")
+        );
+        assert_eq!(get_type(""), None);
+        assert_eq!(get_type("assets/"), None);
+        assert_eq!(get_type("assets/minecraft"), None);
+    }
+
+    #[test]
+    fn test_parse_path() {
+        let (overlay, id) = parse_path("assets/minecraft/textures/block/stone.png");
+        assert_eq!(overlay, "");
+        assert_eq!(
+            id,
+            Identifier::new("minecraft", "block/stone")
+        );
+        let (overlay, id) = parse_path("overlay_1/assets/minecraft/models/item/stick.json");
+        assert_eq!(overlay, "overlay_1");
+        assert_eq!(
+            id,
+            Identifier::new("minecraft".to_string(), "item/stick".to_string())
+        );
+        let (overlay, id) = parse_path("assets/minecraft/textures/block/my.block.png");
+        assert_eq!(overlay, "");
+        assert_eq!(
+            id,
+            Identifier::new("minecraft".to_string(), "block/my.block".to_string())
+        );
+        let (overlay, id) = parse_path("assets/minecraft/textures/no_extension");
+        assert_eq!(overlay, "");
+        assert_eq!(
+            id,
+            Identifier::new("minecraft".to_string(), "no_extension".to_string())
+        );
+    }
 }

@@ -1,7 +1,7 @@
 use crate::resource_pack::mapping::{get_id_usage_counter, get_mappings, IdCategory};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Identifier {
     pub namespace: String,
     pub path: String,

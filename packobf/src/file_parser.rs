@@ -1,36 +1,36 @@
 use crate::minecraft::builtin_files::AtlasType;
+use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::files::blockstate::Blockstate;
 use crate::resource_pack::files::font::Font;
 use crate::resource_pack::files::item::Item;
 use crate::resource_pack::files::json::Json;
 use crate::resource_pack::files::model::Model;
+use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
 use crate::resource_pack::files::shader::Shader;
 use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::asset_texture::AssetTexture;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::Error;
 use crate::{get_type, parse_path, LogMessage, Progress};
-use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
-use rayon::ThreadPool;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
-use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
-use crate::resource_pack::files::unknowntexture::UnknownTexture;
 
 pub fn parse_resource_pack_files(
     logger: &UnboundedSender<LogMessage>,
-    entries: &mut Vec<(String, Vec<u8>)>,
+    entries: Vec<(String, Vec<u8>)>,
     progress: Sender<Progress>,
     pack: Arc<ResourcePack>,
     thread_pool: &ThreadPool
 ) {
     thread_pool.install(|| {
-        entries.par_iter_mut().for_each(move |(name, content)| {
+        entries.par_iter().for_each(move |(name, content)| {
             parse_resource_pack_file(logger, &progress, &pack, name, content);
         });
     });
@@ -40,8 +40,8 @@ fn parse_resource_pack_file(
     logger: &UnboundedSender<LogMessage>,
     progress: &Sender<Progress>,
     pack: &Arc<ResourcePack>,
-    name: &mut String,
-    content: &mut Vec<u8>,
+    name: &str,
+    content: &[u8],
 ) {
     let _ = progress.send(Progress::Parsing {
         current: name.to_string(),
@@ -61,7 +61,7 @@ fn parse_resource_pack_file(
         },
     );
     if name == "pack.mcmeta" {
-        let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+        let json_str = match parse_utf8_or_unknown_file(logger, pack, &*name, &*content) {
             Some(value) => value,
             None => return,
         };
@@ -70,14 +70,14 @@ fn parse_resource_pack_file(
                 pack.pack_mcmeta(value);
             }
             Err(e) => {
-                handle_parse_error(logger, pack, name, content, e);
+                handle_parse_error(logger, pack, &*name, &*content, e);
             }
         }
     } else if name.ends_with(".json") {
-        match get_type(name) {
+        match get_type(&name) {
             Some("models") => {
-                let (overlay, identifier) = parse_path(name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                let (overlay, identifier) = parse_path(&name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                     Some(value) => value,
                     None => return,
                 };
@@ -86,13 +86,13 @@ fn parse_resource_pack_file(
                         pack.model(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, name, content, e);
+                        handle_parse_error(logger, pack, &name, &content, e);
                     }
                 }
             }
             Some("blockstates") => {
-                let (overlay, identifier) = parse_path(name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                let (overlay, identifier) = parse_path(&name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                     Some(value) => value,
                     None => return,
                 };
@@ -101,13 +101,13 @@ fn parse_resource_pack_file(
                         pack.blockstate(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, name, content, e);
+                        handle_parse_error(logger, pack, &name, &content, e);
                     }
                 }
             }
             Some("items") => {
-                let (overlay, identifier) = parse_path(name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                let (overlay, identifier) = parse_path(&name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                     Some(value) => value,
                     None => return,
                 };
@@ -117,13 +117,13 @@ fn parse_resource_pack_file(
                         pack.item(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, name, content, e);
+                        handle_parse_error(logger, pack, &name, &content, e);
                     }
                 }
             }
             Some("font") => {
-                let (overlay, identifier) = parse_path(name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                let (overlay, identifier) = parse_path(&name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                     Some(value) => value,
                     None => return,
                 };
@@ -133,13 +133,13 @@ fn parse_resource_pack_file(
                         pack.font(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, name, content, e);
+                        handle_parse_error(logger, pack, &name, &content, e);
                     }
                 }
             }
             Some("atlases") => {
-                let (overlay, identifier) = parse_path(name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                let (overlay, identifier) = parse_path(&name);
+                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                     Some(value) => value,
                     None => return,
                 };
@@ -150,7 +150,7 @@ fn parse_resource_pack_file(
                             pack.atlas(value);
                         }
                         Err(e) => {
-                            handle_parse_error(logger, pack, name, content, e);
+                            handle_parse_error(logger, pack, &name, &content, e);
                         }
                     },
                     Err(_) => {
@@ -167,8 +167,8 @@ fn parse_resource_pack_file(
             }
             _ => {
                 if name.ends_with("/sounds.json") {
-                    let (overlay, identifier) = parse_path(name);
-                    let json_str = match parse_utf8_or_unknown_file(logger, pack, name, content) {
+                    let (overlay, identifier) = parse_path(&name);
+                    let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                         Some(value) => value,
                         None => return,
                     };
@@ -177,40 +177,40 @@ fn parse_resource_pack_file(
                             pack.sound_definitions(value);
                         }
                         Err(e) => {
-                            handle_parse_error(logger, pack, name, content, e);
+                            handle_parse_error(logger, pack, &name, &content, e);
                         }
                     }
                 } else {
-                    json_file(logger, pack, name, content);
+                    json_file(logger, pack, &name, &content);
                 }
             }
         }
     } else if name.ends_with(".mcmeta") {
-        json_file(logger, pack, name, content);
+        json_file(logger, pack, &name, &content);
     } else if name.ends_with(".png") {
-        if get_type(name) == Some("textures") {
-            let (overlay, identifier) = parse_path(name);
+        if get_type(&name) == Some("textures") {
+            let (overlay, identifier) = parse_path(&name);
             pack.texture(AssetTexture::new(overlay, identifier, content.to_owned()));
         } else {
-            pack.unknown_texture(UnknownTexture::new(name.as_str(), content.to_owned()))
+            pack.unknown_texture(UnknownTexture::new(name, content.to_owned()))
         }
     } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
         pack.shader(Shader::new(
             name.to_owned(),
-            match parse_utf8_or_unknown_file(logger, pack, name, content) {
+            match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
                 Some(value) => value,
                 None => return,
             },
         ));
-    } else if name.ends_with(".ogg") && get_type(name) == Some("sounds") {
-        let (overlay, identifier) = parse_path(name);
+    } else if name.ends_with(".ogg") && get_type(&name) == Some("sounds") {
+        let (overlay, identifier) = parse_path(&name);
         pack.sound(Sound::new(overlay, identifier, content.to_owned()));
     } else {
         pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
     }
 }
 
-fn json_file(logger: &UnboundedSender<LogMessage>, pack: &Arc<ResourcePack>, name: &mut String, content: &mut Vec<u8>) {
+fn json_file(logger: &UnboundedSender<LogMessage>, pack: &Arc<ResourcePack>, name: &str, content: &[u8]) {
     match serde_json::from_slice(content) {
         Ok(value) => {
             pack.json_file(Json::new(name.to_owned(), value));
