@@ -29,6 +29,7 @@ strum = "0.28.0"
 strum_macros = "0.28.0"
 arc-swap = "1"
 dhat = "0.3.3"
+fxhash = "0.2.1"
 
 [build-dependencies]
 phf_codegen = "0.14.0"

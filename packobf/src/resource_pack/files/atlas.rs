@@ -108,11 +108,11 @@ impl Atlas {
     pub fn path(&self) -> String {
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
-            x => format!("{}/", x),
+            x => format!("{x}/"),
         };
         format!(
-            "{}assets/minecraft/atlases/{}.json",
-            prefix, self.atlas_type
+            "{prefix}assets/minecraft/atlases/{}.json",
+            self.atlas_type
         )
     }
 
@@ -132,7 +132,7 @@ impl Atlas {
                 Source::Directory { source, prefix }
                     if texture_id.path.starts_with(prefix) => {
                         let remaining_path = &texture_id.path[prefix.len()..];
-                        let resource_path = format!("{}{}", source, remaining_path);
+                        let resource_path = format!("{source}{remaining_path}");
 
                         result = Some(Identifier {
                             namespace: texture_id.namespace.clone(),

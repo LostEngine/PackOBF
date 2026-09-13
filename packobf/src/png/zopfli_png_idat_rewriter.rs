@@ -64,7 +64,7 @@ pub fn rewrite_idat_with_zopfli(
             if length != 13 {
                 let _ = logger.send(LogMessage {
                     level: LogLevel::Error,
-                    message: format!("Wrong length for IHDR chunk: {}", length),
+                    message: format!("Wrong length for IHDR chunk: {length}"),
                 });
                 return input.into();
             }
@@ -256,18 +256,6 @@ fn compress(original_data: &[u8], options: Options) -> Result<Vec<u8>, Error> {
     encoder.write_all(original_data)?;
     let out = encoder.finish()?;
     Ok(out)
-}
-
-#[macro_export]
-macro_rules! compress {
-    ($options:expr) => {{}};
-}
-
-#[macro_export]
-macro_rules! stop {
-    ($output:expr, $input:expr, $offset:expr) => {{
-        input
-    }};
 }
 
 /// [11.2.1 IHDR Image header](https://www.w3.org/TR/png-3/#11IHDR)

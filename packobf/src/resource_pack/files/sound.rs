@@ -30,10 +30,10 @@ impl Sound {
     }
 
     pub fn optimize(
-        &mut self,
+        &self,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
-    ) {
+    ) -> Vec<u8> {
         profile_scope!(std::any::type_name_of_val(&Sound::optimize));
         if let Some(cache) = cache {
             let mut sha256 = Sha256::new();
@@ -45,8 +45,7 @@ impl Sound {
                     level: Info,
                     message: format!("Sound '{}' was loaded from cache.", self.path()),
                 });
-                self.bytes = bytes;
-                return;
+                return bytes;
             }
         }
         let mut source = Cursor::new(self.bytes.clone());
@@ -74,7 +73,7 @@ impl Sound {
                 if let Some(cache) = cache {
                     cache.add_item(&self.bytes, &*bytes, 0, ItemType::Sound)
                 }
-                self.bytes = bytes;
+                bytes
             }
             Err(e) => {
                 let _ = logger.send(LogMessage {
@@ -85,6 +84,7 @@ impl Sound {
                         e
                     ),
                 });
+                self.bytes.clone()
             }
         }
     }
@@ -92,7 +92,7 @@ impl Sound {
     pub fn path(&self) -> String {
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
-            x => format!("{}/", x),
+            x => format!("{x}/"),
         };
         format!(
             "{}assets/{}/sounds/{}.ogg",

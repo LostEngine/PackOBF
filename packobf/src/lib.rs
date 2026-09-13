@@ -16,18 +16,6 @@ pub mod version;
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
 use crate::options::{Options, ShaderCompression};
-use crate::resource_pack::files::atlas::Atlas;
-use crate::resource_pack::files::blockstate::Blockstate;
-use crate::resource_pack::files::font::Font;
-use crate::resource_pack::files::item::Item;
-use crate::resource_pack::files::json::Json;
-use crate::resource_pack::files::model::Model;
-use crate::resource_pack::files::resource_pack_file::ResourcePackFile;
-use crate::resource_pack::files::shader::Shader;
-use crate::resource_pack::files::sound::Sound;
-use crate::resource_pack::files::sound_definitions::SoundDefinitions;
-use crate::resource_pack::files::asset_texture::AssetTexture;
-use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
@@ -35,7 +23,8 @@ use crate::resource_pack::pack::ResourcePack;
 use crate::LogLevel::{Info, Warning};
 use dashmap::DashMap;
 use rayon::prelude::*;
-use rayon::{ThreadPool, ThreadPoolBuilder};
+use rayon::ThreadPoolBuilder;
+use std::borrow::Cow;
 use std::error::Error;
 use std::io::{Cursor, Read};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -43,7 +32,6 @@ use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
 use zip::ZipArchive;
-use crate::resource_pack::files::pack_mcmeta::PackMcmeta;
 
 #[cfg(feature = "dhat-heap")]
 #[global_allocator]
@@ -81,9 +69,12 @@ pub fn process_zip(
         &pool,
     );
 
+    let pack = Arc::try_unwrap(pack).unwrap_or_else(|arc| (*arc).clone());
+    let mut pack = pack.freeze();
+
     if let Some(target_version) = options.target_version {
         version::set_target_version(target_version as u8);
-        overlay_remover::remove_overlays(logger, &pack, target_version, &pool);
+        overlay_remover::remove_overlays(logger, &mut pack, target_version, &pool);
         if version::is_older_than_1_21_4(&()) {
             pack.items.clear(); // Added in 1.21.4
         }
@@ -95,13 +86,10 @@ pub fn process_zip(
 
     let mut mapping = Mapping::default();
     if options.rename_files {
-        renamer::rename_files(logger, &pack, &mut mapping);
+        renamer::rename_files(logger, &mut pack, &mut mapping);
     }
     mapping::set_mappings(mapping);
 
-    let mut items = collect_files(pack, &pool);
-
-    let total = items.len();
     let mut output = Cursor::new(Vec::new());
     let writer = OptimizedZipWriter::new(&mut output);
 
@@ -114,7 +102,7 @@ pub fn process_zip(
     let cache = if let Some(cache) = cache_file {
         let _ = logger.send(LogMessage {
             level: Info,
-            message: format!("Loading cache from {}", cache),
+            message: format!("Loading cache from {cache}"),
         });
         let cache = match Cache::load_from_file(cache) {
             Ok(cache) => {
@@ -127,7 +115,7 @@ pub fn process_zip(
             Err(e) => {
                 let _ = logger.send(LogMessage {
                     level: Warning,
-                    message: format!("Invalid cache file, creating a new one. Error: {}", e),
+                    message: format!("Invalid cache file, creating a new one. Error: {e}"),
                 });
                 Cache {
                     items: DashMap::new(),
@@ -140,57 +128,174 @@ pub fn process_zip(
     };
 
     pool.install(|| {
-        let to_optimize: Vec<_> = items
-            .par_iter_mut()
-            .filter(|(_, item)| match item {
-                ResourcePackItem::Texture(_) | ResourcePackItem::UnknownTexture(_) => true,
-                ResourcePackItem::Shader(_) => {
-                    options.shader_compression != ShaderCompression::None
-                }
-                ResourcePackItem::Sound(_) => true,
-                _ => false,
-            })
-            .collect();
+        let optimize_shaders = options.shader_compression != ShaderCompression::None;
 
-        let total_to_optimize = to_optimize.len();
-        let counter = AtomicUsize::new(0);
-        to_optimize.into_par_iter().for_each(|(name, item)| {
-            let _ = progress.send(Progress::Optimizing {
-                current: name.to_string(),
-                index: counter.fetch_add(1, Ordering::Relaxed),
-                total: total_to_optimize,
-            });
-            match item {
-                ResourcePackItem::Texture(x) => {
-                    x.optimize(options, logger, &cache);
-                }
-                ResourcePackItem::UnknownTexture(x) => {
-                    x.optimize(options, logger, &cache);
-                }
-                ResourcePackItem::Shader(x) => {
-                    x.optimize(options, logger);
-                }
-                ResourcePackItem::Sound(x) => {
-                    x.optimize(logger, &cache);
-                }
-                _ => {}
-            }
-        });
+        let total_to_optimize = pack.textures.len()
+            + pack.unknown_textures.len()
+            + pack.sounds.len()
+            + if optimize_shaders { pack.shaders.len() } else { 0 };
 
-        let counter = AtomicUsize::new(0);
-        items.par_iter_mut().for_each(|(name, item)| {
-            match add_item_to_archive(
-                options, &progress, total, &writer, &counter, &cache, name, item,
-            ) {
-                Ok(_) => {}
-                Err(e) => {
-                    let _ = logger.send(LogMessage {
-                        level: LogLevel::Error,
-                        message: format!("Failed to add item to archive: {}", e),
+        let total_files = pack.textures.len()
+            + pack.unknown_textures.len()
+            + pack.sounds.len()
+            + pack.shaders.len()
+            + pack.models.len()
+            + pack.json_files.len()
+            + pack.unknown_files.len()
+            + pack.blockstates.len()
+            + pack.fonts.len()
+            + pack.items.len()
+            + pack.sound_definitions.len()
+            + pack.atlases.len();
+
+        let off_unkn_tex = pack.textures.len();
+        let off_sounds = off_unkn_tex + pack.unknown_textures.len();
+        let off_shaders = off_sounds + pack.sounds.len();
+        let off_models = off_shaders + pack.shaders.len();
+        let off_jsons = off_models + pack.models.len();
+        let off_blockstates = off_jsons + pack.json_files.len();
+        let off_fonts = off_blockstates + pack.blockstates.len();
+        let off_items = off_fonts + pack.fonts.len();
+        let off_sound_defs = off_items + pack.items.len();
+        let off_atlases = off_sound_defs + pack.sound_definitions.len();
+        let off_unknown_files = off_atlases + pack.atlases.len();
+
+        let tex_slice = pack.textures.as_mut_slice();
+        let unkn_tex_slice = pack.unknown_textures.as_mut_slice();
+        let sounds_slice = pack.sounds.as_mut_slice();
+        let shaders_slice = pack.shaders.as_mut_slice();
+        let models_slice = pack.models.as_slice();
+        let jsons_slice = pack.json_files.as_slice();
+        let blockstates_slice = pack.blockstates.as_slice();
+        let fonts_slice = pack.fonts.as_slice();
+        let items_slice = pack.items.as_slice();
+        let sound_defs_slice = pack.sound_definitions.as_slice();
+        let atlases_slice = pack.atlases.as_slice();
+        let unknown_files_slice = pack.unknown_files.as_slice();
+
+        let boundaries = [
+            off_unkn_tex,
+            off_sounds,
+            off_shaders,
+            off_models,
+            off_jsons,
+            off_blockstates,
+            off_fonts,
+            off_items,
+            off_sound_defs,
+            off_atlases,
+            off_unknown_files,
+        ];
+
+        let opt_counter = AtomicUsize::new(0);
+        let build_counter = AtomicUsize::new(0);
+        let i = AtomicUsize::new(0);
+
+        (0..total_files).into_par_iter().for_each(|_| {
+            let i = i.fetch_add(1, Ordering::Relaxed);
+            let category = boundaries.partition_point(|&b| i >= b);
+            let (raw_path, bytes): (&str, Cow<'_, [u8]>) = match category {
+                0 => {
+                    let (name, t) = &tex_slice[i];
+                    let _ = progress.send(Progress::Optimizing {
+                        current: name.to_string(),
+                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                        total: total_to_optimize,
                     });
+                    (name.as_str(), Cow::Owned(t.optimize(options, logger, &cache)))
                 }
+                1 => {
+                    let local_i = i - off_unkn_tex;
+                    let (name, ut) = &unkn_tex_slice[local_i];
+                    let _ = progress.send(Progress::Optimizing {
+                        current: name.to_string(),
+                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                        total: total_to_optimize,
+                    });
+                    (name.as_str(), Cow::Owned(ut.optimize(options, logger, &cache)))
+                }
+                2 => {
+                    let local_i = i - off_sounds;
+                    let (name, s) = &sounds_slice[local_i];
+                    let _ = progress.send(Progress::Optimizing {
+                        current: name.to_string(),
+                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                        total: total_to_optimize,
+                    });
+                    (name.as_str(), Cow::Owned(s.optimize(logger, &cache)))
+                }
+                3 => {
+                    let local_i = i - off_shaders;
+                    let (name, s) = &shaders_slice[local_i];
+                    if optimize_shaders {
+                        let _ = progress.send(Progress::Optimizing {
+                            current: name.to_string(),
+                            index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                            total: total_to_optimize,
+                        });
+                    }
+                    (name.as_str(), Cow::Owned(s.optimize(options, logger).into_bytes()))
+                }
+                4 => {
+                    let local_i = i - off_models;
+                    let (name, m) = &models_slice[local_i];
+                    (name.as_str(), Cow::Owned(m.to_string().into_bytes()))
+                }
+                5 => {
+                    let local_i = i - off_jsons;
+                    let (name, j) = &jsons_slice[local_i];
+                    (name.as_str(), Cow::Owned(j.content.to_string().into_bytes()))
+                }
+                6 => {
+                    let local_i = i - off_blockstates;
+                    let (name, b) = &blockstates_slice[local_i];
+                    (name.as_str(), Cow::Owned(b.to_string().into_bytes()))
+                }
+                7 => {
+                    let local_i = i - off_fonts;
+                    let (name, f) = &fonts_slice[local_i];
+                    (name.as_str(), Cow::Owned(f.to_string().into_bytes()))
+                }
+                8 => {
+                    let local_i = i - off_items;
+                    let (name, item) = &items_slice[local_i];
+                    (name.as_str(), Cow::Owned(item.to_string().into_bytes()))
+                }
+                9 => {
+                    let local_i = i - off_sound_defs;
+                    let (name, sd) = &sound_defs_slice[local_i];
+                    (name.as_str(), Cow::Owned(sd.to_string().into_bytes()))
+                }
+                10 => {
+                    let local_i = i - off_atlases;
+                    let (name, a) = &atlases_slice[local_i];
+                    (name.as_str(), Cow::Owned(a.to_string().into_bytes()))
+                } _ => {
+                    let local_i = i - off_unknown_files;
+                    let (name, u) = &unknown_files_slice[local_i];
+                    (name.as_str(), Cow::Borrowed(u.bytes.as_slice()))
+                }
+            };
+
+            let target_path = resolve_asset_path(raw_path);
+
+            let _ = progress.send(Progress::Building {
+                current: target_path.as_ref().to_string(),
+                index: build_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                total: total_files,
+            });
+
+            if let Err(e) = writer.add_file(&target_path, &bytes, options, &cache) {
+                let _ = logger.send(LogMessage {
+                    level: LogLevel::Error,
+                    message: format!("Failed to add item {target_path} to archive: {e}"),
+                });
             }
         });
+
+        if let Some(ref mcmeta) = pack.pack_mcmeta {
+            let _ = writer.add_file(mcmeta.path(), mcmeta.to_string().as_bytes(), options, &cache);
+        }
     });
 
     writer.finish()?;
@@ -205,77 +310,15 @@ pub fn process_zip(
     Ok(output.into_inner())
 }
 
-#[allow(clippy::too_many_arguments)] // Generated by my IDE it's fine
-fn add_item_to_archive(
-    options: &Options,
-    progress: &Sender<Progress>,
-    total: usize,
-    writer: &OptimizedZipWriter<&mut Cursor<Vec<u8>>>,
-    counter: &AtomicUsize,
-    cache: &Option<Cache>,
-    name: &mut String,
-    item: &mut ResourcePackItem,
-) -> Result<(), Box<dyn Error + Send + Sync>> {
-    let _ = progress.send(Progress::Building {
-        current: name.to_string(),
-        index: counter.fetch_add(1, Ordering::Relaxed),
-        total,
-    });
-    if !name.starts_with("assets/") {
-        if let Some((overlay, rest)) = name.split_once('/') {
+fn resolve_asset_path(path: &str) -> Cow<'_, str> {
+    if !path.starts_with("assets/") {
+        if let Some((overlay, rest)) = path.split_once('/') {
             if let Some(value) = mapping::get_mappings().overlay_mappings.get(overlay) {
-                *name = format!("{value}/{rest}");
+                return Cow::Owned(format!("{value}/{rest}"));
             }
         }
     }
-    match item {
-        ResourcePackItem::Texture(o) => writer.add_file(
-            name.as_str(),
-            o.texture.bytes.as_slice(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::Shader(o) => {
-            writer.add_file(name.as_str(), o.content.as_bytes(), options, cache)
-        }
-        ResourcePackItem::Json(o) => writer.add_file(
-            name.as_str(),
-            o.content.to_string().as_bytes(),
-            options,
-            cache,
-        ),
-        ResourcePackItem::Model(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Unknown(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
-        }
-        ResourcePackItem::BlockStateDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::FontDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::ItemDefinition(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Sound(o) => {
-            writer.add_file(name.as_str(), o.bytes.as_slice(), options, cache)
-        }
-        ResourcePackItem::SoundDefinitions(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::Atlas(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-        ResourcePackItem::UnknownTexture(o) => {
-            writer.add_file(name.as_str(), o.texture.bytes.as_slice(), options, cache)
-        }
-        ResourcePackItem::PackMcmeta(o) => {
-            writer.add_file(name.as_str(), o.to_string().as_bytes(), options, cache)
-        }
-    }?;
-    Ok(())
+    Cow::Borrowed(path)
 }
 
 fn read_zip_entries(
@@ -309,97 +352,6 @@ fn read_zip_entries(
     Ok(entries)
 }
 
-fn collect_files(
-    pack: Arc<ResourcePack>,
-    thread_pool: &ThreadPool,
-) -> Vec<(String, ResourcePackItem)> {
-    profile_scope!(std::any::type_name_of_val(&collect_files));
-    thread_pool.install(|| {
-        let mut files: Vec<_> = pack
-            .textures
-            .par_iter()
-            .map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Texture(kv.value().clone()),
-                )
-            })
-            .chain(pack.unknown_textures.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::UnknownTexture(kv.value().clone()),
-                )
-            }))
-            .chain(pack.shaders.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Shader(kv.value().clone()),
-                )
-            }))
-            .chain(pack.models.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Model(kv.value().clone()),
-                )
-            }))
-            .chain(
-                pack.json_files
-                    .par_iter()
-                    .map(|kv| (kv.key().clone(), ResourcePackItem::Json(kv.value().clone()))),
-            )
-            .chain(pack.unknown_files.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Unknown(kv.value().clone()),
-                )
-            }))
-            .chain(pack.blockstates.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::BlockStateDefinition(kv.value().clone()),
-                )
-            }))
-            .chain(pack.fonts.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::FontDefinition(kv.value().clone()),
-                )
-            }))
-            .chain(pack.items.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::ItemDefinition(kv.value().clone()),
-                )
-            }))
-            .chain(pack.sounds.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Sound(kv.value().clone()),
-                )
-            }))
-            .chain(pack.sound_definitions.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::SoundDefinitions(kv.value().clone()),
-                )
-            }))
-            .chain(pack.atlases.par_iter().map(|kv| {
-                (
-                    kv.key().clone(),
-                    ResourcePackItem::Atlas(kv.value().clone()),
-                )
-            }))
-            .collect();
-        if let Some(mcmeta) = pack.pack_mcmeta.lock().unwrap().clone() {
-            files.push((
-                mcmeta.path().to_owned(),
-                ResourcePackItem::PackMcmeta(mcmeta),
-            ));
-        }
-        files
-    })
-}
-
 #[derive(Clone, Debug)]
 pub enum Progress {
     Idle,
@@ -421,23 +373,6 @@ pub enum Progress {
         total: usize,
     },
     Done,
-}
-
-#[derive(Clone, Debug)]
-enum ResourcePackItem {
-    Texture(AssetTexture),
-    UnknownTexture(UnknownTexture),
-    Shader(Shader),
-    Json(Json),
-    Model(Model),
-    Unknown(ResourcePackFile),
-    BlockStateDefinition(Blockstate),
-    FontDefinition(Font),
-    ItemDefinition(Item),
-    Sound(Sound),
-    SoundDefinitions(SoundDefinitions),
-    Atlas(Atlas),
-    PackMcmeta(PackMcmeta),
 }
 
 fn get_type(path: &str) -> Option<&str> {

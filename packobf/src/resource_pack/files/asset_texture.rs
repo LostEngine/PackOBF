@@ -29,22 +29,22 @@ impl AssetTexture {
     }
 
     pub fn optimize(
-        &mut self,
+        &self,
         options: &Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
-    ) {
-        self.texture.optimize(options, logger, cache, self.path().as_str());
+    ) -> Vec<u8> {
+        self.texture.optimize(options, logger, cache, self.path().as_str())
     }
 
     pub fn path(&self) -> String {
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
-            x => format!("{}/", x),
+            x => format!("{x}/"),
         };
         format!(
-            "{}assets/{}/textures/{}.png",
-            prefix, self.identifier.namespace, self.identifier.path
+            "{prefix}assets/{}/textures/{}.png",
+            self.identifier.namespace, self.identifier.path
         )
     }
 }

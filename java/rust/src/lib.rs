@@ -171,7 +171,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
             Ok(Err(e)) => {
                 let _ = env.throw_new(
                     JNIString::from("java/io/IOException"),
-                    JNIString::from(format!("Zip processing failed: {}", e)),
+                    JNIString::from(format!("Zip processing failed: {e}")),
                 );
                 return Err(Error::JavaException);
             }
@@ -187,7 +187,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
 
                 let _ = env.throw_new(
                     JNIString::from("java/io/IOException"),
-                    JNIString::from(format!("Rust panic during zip processing: {}", msg)),
+                    JNIString::from(format!("Rust panic during zip processing: {msg}")),
                 );
 
                 return Err(Error::JavaException);

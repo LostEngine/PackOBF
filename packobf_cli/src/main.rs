@@ -2,7 +2,7 @@ extern crate core;
 
 use clap::{Parser, ValueEnum};
 use console::{Emoji, style};
-use indicatif::{DecimalBytes, ProgressBar, ProgressStyle};
+use indicatif::{DecimalBytes, MultiProgress, ProgressBar, ProgressStyle};
 use packobf::options::{Options, Preset};
 use packobf::{LogLevel, LogMessage, Progress, process_zip};
 use std::time::Instant;
@@ -77,8 +77,13 @@ pub async fn run_progress_loop(
 ) {
     let global_started = Instant::now();
     let mut stage_started = Instant::now();
+    let mp = MultiProgress::new();
+
     let mut current_pb: Option<ProgressBar> = None;
-    // 1: Idle, 2: Reading, 3: Parsing, 4: Optimizing, 5: Building
+    let mut optimizing_pb: Option<ProgressBar> = None;
+    let mut building_pb: Option<ProgressBar> = None;
+
+    // 1: Idle, 2: Reading, 3: Parsing, 4: Optimizing & Building
     let mut current_stage: u8 = 0;
 
     let clear_current = |pb: &mut Option<ProgressBar>| {
@@ -122,7 +127,12 @@ pub async fn run_progress_loop(
                     LogLevel::Error => style(format!("✘ Error: {}", log.message)).red().bold(),
                 };
 
-                if let Some(ref pb) = current_pb {
+                let active_pb = optimizing_pb
+                    .as_ref()
+                    .or(building_pb.as_ref())
+                    .or(current_pb.as_ref());
+
+                if let Some(pb) = active_pb {
                     pb.println(format!("{}", msg));
                 } else {
                     eprintln!("{}", msg);
@@ -132,139 +142,154 @@ pub async fn run_progress_loop(
             Ok(_) = rx.changed() => {
                 let state = rx.borrow().clone();
 
-        match state {
-            Progress::Idle => {
-                if current_stage != 1 {
-                    println!(
-                        "{} {} Initializing...",
-                        style("[1/5]").bold().dim(),
-                        LOOKING_GLASS
-                    );
-                    current_stage = 1;
-                    stage_started = Instant::now();
+                match state {
+                    Progress::Idle => {
+                        if current_stage != 1 {
+                            println!(
+                                "{} {} Initializing...",
+                                style("[1/4]").bold().dim(),
+                                LOOKING_GLASS
+                            );
+                            current_stage = 1;
+                            stage_started = Instant::now();
+                        }
+                    }
+
+                    Progress::ReadingZip { current, total } => {
+                        if current_stage != 2 {
+                            print_finished_stage(&mut current_pb, "Initialized", stage_started);
+                            clear_current(&mut current_pb);
+                            println!(
+                                "{} {} Reading archive...",
+                                style("[2/4]").bold().dim(),
+                                TRUCK
+                            );
+                            current_stage = 2;
+                            stage_started = Instant::now();
+                        }
+
+                        let pb = current_pb.get_or_insert_with(|| {
+                            let p = mp.add(ProgressBar::new(total as u64));
+                            p.set_style(bar_style.clone());
+                            p.set_prefix("[2/4]");
+                            p
+                        });
+                        if pb.position() < current as u64 {
+                            pb.set_position(current as u64);
+                        }
+                        pb.set_message("Unzipping files");
+                    }
+
+                    Progress::Parsing { current } => {
+                        if current_stage != 3 {
+                            print_finished_stage(&mut current_pb, "Archive Read", stage_started);
+
+                            clear_current(&mut current_pb);
+                            println!(
+                                "{} {} Parsing resource files...",
+                                style("[3/4]").bold().dim(),
+                                CLIP
+                            );
+                            let pb = mp.add(ProgressBar::new_spinner());
+                            pb.set_style(spinner_style.clone());
+                            pb.set_prefix("[3/4]");
+                            current_pb = Some(pb);
+                            current_stage = 3;
+                            stage_started = Instant::now();
+                        }
+
+                        if let Some(ref pb) = current_pb {
+                            pb.set_message(format!("Analyzing {}", current));
+                            pb.tick();
+                        }
+                    }
+
+                    Progress::Optimizing {
+                        current,
+                        index,
+                        total,
+                    } => {
+                        if current_stage != 4 {
+                            print_finished_stage(&mut current_pb, "Parsing Complete", stage_started);
+                            clear_current(&mut current_pb);
+                            println!(
+                                "{} {}{}Optimizing and building resource pack...",
+                                style("[4/4]").bold().dim(),
+                                OPTIMIZING,
+                                BUILDING
+                            );
+                            current_stage = 4;
+                            stage_started = Instant::now();
+                        }
+
+                        let pb = optimizing_pb.get_or_insert_with(|| {
+                            let p = if let Some(ref bld) = building_pb {
+                                mp.insert_before(bld, ProgressBar::new(total as u64))
+                            } else {
+                                mp.add(ProgressBar::new(total as u64))
+                            };
+                            p.set_style(bar_style.clone());
+                            p.set_prefix("[4/4] Optimizing");
+                            p
+                        });
+                        if pb.length() != Some(total as u64) {
+                            pb.set_length(total as u64);
+                        }
+                        if pb.position() < index as u64 {
+                            pb.set_position(index as u64);
+                        }
+                        pb.set_message(format!("File: {}", current));
+                    }
+
+                    Progress::Building {
+                        current,
+                        index,
+                        total,
+                    } => {
+                        if current_stage != 4 {
+                            print_finished_stage(&mut current_pb, "Parsing Complete", stage_started);
+                            clear_current(&mut current_pb);
+                            println!(
+                                "{} {}{}Optimizing and building resource pack...",
+                                style("[4/4]").bold().dim(),
+                                OPTIMIZING,
+                                BUILDING
+                            );
+                            current_stage = 4;
+                            stage_started = Instant::now();
+                        }
+
+                        let pb = building_pb.get_or_insert_with(|| {
+                            let p = if let Some(ref opt) = optimizing_pb {
+                                mp.insert_after(opt, ProgressBar::new(total as u64))
+                            } else {
+                                mp.add(ProgressBar::new(total as u64))
+                            };
+                            p.set_style(bar_style.clone());
+                            p.set_prefix("[4/4] Building  ");
+                            p
+                        });
+                        if pb.length() != Some(total as u64) {
+                            pb.set_length(total as u64);
+                        }
+                        if pb.position() < index as u64 {
+                            pb.set_position(index as u64);
+                        }
+                        pb.set_message(format!("File: {}", current));
+                    }
+
+                    Progress::Done => {
+                        clear_current(&mut optimizing_pb);
+                        clear_current(&mut building_pb);
+                        print_finished_stage(&mut current_pb, "Resource pack built", stage_started);
+                        println!(
+                            "{} Done in {:.3}s",
+                            SPARKLE,
+                            global_started.elapsed().as_secs_f64()
+                        );
+                        break;
+                    }
                 }
-            }
-
-            Progress::ReadingZip { current, total } => {
-                if current_stage != 2 {
-                    print_finished_stage(&mut current_pb, "Initialized", stage_started);
-                    clear_current(&mut current_pb);
-                    println!(
-                        "{} {} Reading archive...",
-                        style("[2/5]").bold().dim(),
-                        TRUCK
-                    );
-                    current_stage = 2;
-                    stage_started = Instant::now();
-                }
-
-                let pb = current_pb.get_or_insert_with(|| {
-                    let p = ProgressBar::new(total as u64);
-                    p.set_style(bar_style.clone());
-                    p.set_prefix("[2/5]");
-                    p
-                });
-                if pb.position() < current as u64 {
-                    pb.set_position(current as u64);
-                }
-                pb.set_message("Unzipping files");
-            }
-
-            Progress::Parsing { current } => {
-                if current_stage != 3 {
-                    print_finished_stage(&mut current_pb, "Archive Read", stage_started);
-
-                    clear_current(&mut current_pb);
-                    println!(
-                        "{} {} Parsing resource files...",
-                        style("[3/5]").bold().dim(),
-                        CLIP
-                    );
-                    let pb = ProgressBar::new_spinner();
-                    pb.set_style(spinner_style.clone());
-                    pb.set_prefix("[3/5]");
-                    current_pb = Some(pb);
-                    current_stage = 3;
-                    stage_started = Instant::now();
-                }
-
-                if let Some(ref pb) = current_pb {
-                    pb.set_message(format!("Analyzing {}", current));
-                    pb.tick();
-                }
-            }
-
-            Progress::Optimizing {
-                current,
-                index,
-                total,
-            } => {
-                if current_stage != 4 {
-                    print_finished_stage(&mut current_pb, "Parsing Complete", stage_started);
-
-                    clear_current(&mut current_pb);
-                    println!(
-                        "{} {} Optimizing resource pack...",
-                        style("[4/5]").bold().dim(),
-                        OPTIMIZING
-                    );
-                    current_stage = 4;
-                    stage_started = Instant::now();
-                }
-
-                let pb = current_pb.get_or_insert_with(|| {
-                    let p = ProgressBar::new(total as u64);
-                    p.set_style(bar_style.clone());
-                    p.set_prefix("[4/5]");
-                    p
-                });
-                if pb.position() < index as u64 {
-                    pb.set_position(index as u64);
-                }
-                pb.set_message(format!("File: {}", current));
-            }
-
-            Progress::Building {
-                current,
-                index,
-                total,
-            } => {
-                if current_stage != 5 {
-                    print_finished_stage(&mut current_pb, "Optimizing Complete", stage_started);
-
-                    clear_current(&mut current_pb);
-                    println!(
-                        "{} {} Building resource pack...",
-                        style("[5/5]").bold().dim(),
-                        BUILDING
-                    );
-                    current_stage = 5;
-                    stage_started = Instant::now();
-                }
-
-                let pb = current_pb.get_or_insert_with(|| {
-                    let p = ProgressBar::new(total as u64);
-                    p.set_style(bar_style.clone());
-                    p.set_prefix("[5/5]");
-                    p
-                });
-                if pb.position() < index as u64 {
-                    pb.set_position(index as u64);
-                }
-                pb.set_message(format!("File: {}", current));
-            }
-
-            Progress::Done => {
-                print_finished_stage(&mut current_pb, "Resource pack built", stage_started);
-                clear_current(&mut current_pb);
-                println!(
-                    "{} Done in {:.3}s",
-                    SPARKLE,
-                    global_started.elapsed().as_secs_f64()
-                );
-                break;
-            }
-        }
             }
         }
     }

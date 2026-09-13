@@ -1,24 +1,23 @@
+use rayon::ThreadPool;
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use dashmap::DashMap;
-use rayon::ThreadPool;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::resource_pack::files::pack_mcmeta::{FormatRange, OverlayEntry, PackVersion};
-use crate::resource_pack::pack::ResourcePack;
-use crate::{LogLevel, LogMessage};
+use crate::resource_pack::pack::FrozenResourcePack;
 use crate::version::MinecraftVersion;
+use crate::{LogLevel, LogMessage};
 
 pub fn remove_overlays(
     logger: &UnboundedSender<LogMessage>,
-    pack: &ResourcePack,
+    pack: &mut FrozenResourcePack,
     minecraft_version: MinecraftVersion,
     thread_pool: &ThreadPool
 ) {
     let entries = {
-        let mut mcmeta = pack.pack_mcmeta.lock().unwrap();
-        let Some(mcmeta) = mcmeta.as_mut() else {
-            return;
+        let mut mcmeta = match pack.pack_mcmeta.take() {
+            Some(mcmeta) => mcmeta,
+            None => return,
         };
         let entries = mcmeta
             .overlays
@@ -28,6 +27,9 @@ pub fn remove_overlays(
 
         // Remove all overlays from the pack
         mcmeta.overlays = None;
+
+        // Put the modified mcmeta back into the pack
+        pack.pack_mcmeta = Some(mcmeta);
         entries
     };
 
@@ -50,7 +52,7 @@ pub fn remove_overlays(
     macro_rules! resolve_typed {
         ($map:expr) => {
             changed.fetch_add(
-                resolve_map(
+                resolve_vec(
                     $map,
                     &all,
                     &active,
@@ -68,7 +70,7 @@ pub fn remove_overlays(
     macro_rules! resolve_path {
         ($map:expr) => {
             changed.fetch_add(
-                resolve_map(
+                resolve_vec(
                     $map,
                     &all,
                     &active,
@@ -86,40 +88,40 @@ pub fn remove_overlays(
     thread_pool.install(|| {
         rayon::scope(|s| {
             s.spawn(|_| {
-                resolve_typed!(&pack.models);
+                resolve_typed!(&mut pack.models);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.textures);
+                resolve_typed!(&mut pack.textures);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.blockstates);
+                resolve_typed!(&mut pack.blockstates);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.fonts);
+                resolve_typed!(&mut pack.fonts);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.items);
+                resolve_typed!(&mut pack.items);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.sounds);
+                resolve_typed!(&mut pack.sounds);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.sound_definitions);
+                resolve_typed!(&mut pack.sound_definitions);
             });
             s.spawn(|_| {
-                resolve_typed!(&pack.atlases);
+                resolve_typed!(&mut pack.atlases);
             });
             s.spawn(|_| {
-                resolve_path!(&pack.json_files);
+                resolve_path!(&mut pack.json_files);
             });
             s.spawn(|_| {
-                resolve_path!(&pack.shaders);
+                resolve_path!(&mut pack.shaders);
             });
             s.spawn(|_| {
-                resolve_path!(&pack.unknown_textures);
+                resolve_path!(&mut pack.unknown_textures);
             });
             s.spawn(|_| {
-                resolve_path!(&pack.unknown_files);
+                resolve_path!(&mut pack.unknown_files);
             });
         });
     });
@@ -128,37 +130,42 @@ pub fn remove_overlays(
     let _ = logger.send(LogMessage {
         level: LogLevel::Info,
         message: format!(
-            "Removed resource pack overlays for pack format {} ({} files changed)",
-            minecraft_version as i32, changed
+            "Removed resource pack overlays for pack format {} ({changed} files changed)",
+            minecraft_version as i32
         ),
     });
 }
 
-fn resolve_map<T: Clone>(
-    map: &DashMap<String, T>,
+fn resolve_vec<T: Clone>(
+    vec: &mut Vec<(String, T)>,
     declared: &HashSet<String>,
     active: &[String],
     overlay: impl Fn(&T) -> String,
     promote: impl Fn(&mut T) -> String,
 ) -> usize {
-    let entries: Vec<(String, T, String)> = map
+    let entries: Vec<(String, T, String)> = vec
         .iter()
-        .map(|item| {
-            let value = item.value().clone();
-            (item.key().clone(), value.clone(), overlay(&value))
+        .map(|(key, value)| {
+            let overlay_dir = overlay(value);
+            (key.clone(), value.clone(), overlay_dir)
         })
         .filter(|(_, _, directory)| declared.contains(directory))
         .collect();
 
-    for (key, _, _) in &entries {
-        map.remove(key);
+    if entries.is_empty() {
+        return 0;
     }
 
+    let keys_to_remove: HashSet<String> = entries.iter().map(|(key, _, _)| key.clone()).collect();
+
+    vec.retain(|(key, _)| !keys_to_remove.contains(key));
+
     for directory in active {
-        for (_, mut value, entry_overlay) in entries.iter().cloned() {
-            if &entry_overlay == directory {
-                let path = promote(&mut value);
-                map.insert(path, value);
+        for (_, value, entry_overlay) in &entries {
+            if entry_overlay == directory {
+                let mut promoted_val = value.clone();
+                let path = promote(&mut promoted_val);
+                vec.push((path, promoted_val));
             }
         }
     }

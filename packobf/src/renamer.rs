@@ -2,34 +2,30 @@ use crate::minecraft::builtin_files;
 use crate::minecraft::builtin_files::AtlasType;
 use crate::resource_pack::files::atlas::{Atlas, Source};
 use crate::resource_pack::files::font::FontProvider;
-use crate::resource_pack::files::model::Model;
-use crate::resource_pack::files::sound::Sound;
-use crate::resource_pack::files::asset_texture::AssetTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping::{self, Mapping};
-use crate::resource_pack::pack::ResourcePack;
+use crate::resource_pack::pack::FrozenResourcePack;
 use crate::{profile_scope, LogLevel, LogMessage};
 use std::collections::HashMap;
+use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
 
 pub fn rename_files(
     logger: &UnboundedSender<LogMessage>,
-    pack: &ResourcePack,
+    pack: &mut FrozenResourcePack,
     mapping: &mut Mapping,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_files));
     let id_counter = &mapping::get_id_usage_counter();
-    rayon::scope(|s| {
-        s.spawn(|_| rename_overlays(pack, &mut mapping.overlay_mappings));
-        s.spawn(|_| rename_models(pack, &mut mapping.model_mappings, id_counter));
-        s.spawn(|_| rename_textures(logger, pack, &mut mapping.texture_mappings, id_counter));
-        s.spawn(|_| rename_sounds(pack, &mut mapping.sound_mappings, id_counter));
-    });
+    rename_overlays(pack, &mut mapping.overlay_mappings);
+    rename_models(pack, &mut mapping.model_mappings, id_counter);
+    rename_textures(logger, pack, &mut mapping.texture_mappings, id_counter);
+    rename_sounds(pack, &mut mapping.sound_mappings, id_counter);
 }
 
-fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
+fn rename_overlays(pack: &mut FrozenResourcePack, mapping: &mut HashMap<String, String>) {
     profile_scope!(std::any::type_name_of_val(&rename_overlays));
-    if let Some(mcmeta) = pack.pack_mcmeta.lock().unwrap().as_mut() {
+    if let Some(mut mcmeta) = pack.pack_mcmeta.take() {
 
         if let Some(overlay) = mcmeta.overlays.as_mut() {
             if let Some(entries) = overlay.entries.as_mut() {
@@ -40,20 +36,17 @@ fn rename_overlays(pack: &ResourcePack, mapping: &mut HashMap<String, String>) {
                 }
             }
         }
+        pack.pack_mcmeta = Some(mcmeta);
     }
 }
 
 fn rename_sounds(
-    pack: &ResourcePack,
+    pack: &mut FrozenResourcePack,
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_sounds));
-    let mut sounds: Vec<(String, Sound)> = pack
-        .sounds
-        .iter()
-        .map(|entry| (entry.key().clone(), entry.value().clone()))
-        .collect();
+    let mut sounds = take(&mut pack.sounds);
 
     sounds.retain(|(_, x)| {
         !(x.identifier.namespace == "minecraft"
@@ -74,34 +67,34 @@ fn rename_sounds(
             .then_with(|| a_id.cmp(&b_id))
     });
 
-    for (count, (key, mut sound)) in sounds.into_iter().enumerate() {
+    let mut updated_sounds = Vec::with_capacity(sounds.len());
+    for (count, (_key, mut sound)) in sounds.into_iter().enumerate() {
         let identifier = sound.identifier.to_string();
         if let Some(mapped) = mapping.get(&identifier) {
             sound.identifier.path = mapped.clone();
-            pack.sounds.remove(&key);
-            pack.sounds.insert(sound.path(), sound);
+            let new_path = sound.path();
+            updated_sounds.push((new_path, sound));
         } else {
             let new_identifier = Identifier::new("_", generate_short_name(count));
             mapping.insert(identifier, new_identifier.to_string());
             sound.identifier = new_identifier;
-            pack.sounds.remove(&key);
-            pack.sounds.insert(sound.path(), sound);
+            let new_path = sound.path();
+            updated_sounds.push((new_path, sound));
         }
     }
+
+    updated_sounds.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pack.sounds = updated_sounds;
 }
 
 fn rename_textures(
     logger: &UnboundedSender<LogMessage>,
-    pack: &ResourcePack,
+    pack: &mut FrozenResourcePack,
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_textures));
-    let mut textures: Vec<(String, AssetTexture)> = pack
-        .textures
-        .iter()
-        .map(|entry| (entry.key().clone(), entry.value().clone()))
-        .collect();
+    let mut textures = take(&mut pack.textures);
 
     textures.retain(|(_, x)| {
         !(x.identifier.namespace == "minecraft"
@@ -124,23 +117,29 @@ fn rename_textures(
 
     let mut per_folder_count: HashMap<String, usize> = HashMap::new();
     let font_textures = get_font_textures(pack);
-    for (key, mut texture) in textures.into_iter() {
+
+    let mut updated_textures = Vec::with_capacity(textures.len());
+    for (key, mut texture) in textures {
         let identifier = texture.identifier.to_string();
+
         if let Some(mapped) = mapping.get(&identifier) {
             texture.identifier.path = mapped.clone();
-            pack.textures.remove(&key);
             let new_path = texture.path();
-            if let Some(mcmeta) = pack.json_files.remove(format!("{}.mcmeta", key).as_str()) {
-                pack.json_files
-                    .insert(format!("{}.mcmeta", new_path), mcmeta.1);
-            };
-            pack.textures.insert(new_path, texture);
+
+            let old_mcmeta_key = format!("{key}.mcmeta");
+            if let Some(idx) = pack.json_files.iter().position(|(k, _)| k == &old_mcmeta_key) {
+                let (_, mcmeta) = pack.json_files.remove(idx);
+                pack.json_files.push((format!("{new_path}.mcmeta"), mcmeta));
+            }
+
+            updated_textures.push((new_path, texture));
         } else {
             let mut in_items = false;
             let mut in_blocks = false;
             let in_font = font_textures.contains(&texture.identifier.to_string());
             let mut aliases = Vec::new();
-            for atlas in &pack.atlases {
+
+            for (_, atlas) in &pack.atlases {
                 if atlas.overlay != texture.overlay {
                     continue;
                 }
@@ -185,6 +184,8 @@ fn rename_textures(
             } else if in_font {
                 ""
             } else {
+                // If skipping, retain the item unchanged
+                updated_textures.push((key, texture));
                 continue;
             };
             let count = per_folder_count.entry(prefix.to_string()).or_insert(0);
@@ -192,22 +193,31 @@ fn rename_textures(
             let new_identifier = Identifier::new("_", path);
             mapping.insert(identifier, new_identifier.to_string());
             texture.identifier = new_identifier;
-            pack.textures.remove(&key);
             let new_path = texture.path();
-            if let Some(mcmeta) = pack.json_files.remove(format!("{}.mcmeta", key).as_str()) {
-                pack.json_files
-                    .insert(format!("{}.mcmeta", new_path), mcmeta.1);
-            };
-            pack.textures.insert(new_path, texture);
+
+            // Handle .mcmeta relocation in vector-based json_files
+            let old_mcmeta_key = format!("{key}.mcmeta");
+            if let Some(idx) = pack.json_files.iter().position(|(k, _)| k == &old_mcmeta_key) {
+                let (_, mcmeta) = pack.json_files.remove(idx);
+                pack.json_files.push((format!("{new_path}.mcmeta"), mcmeta));
+            }
+
+            updated_textures.push((new_path, texture));
             *count += 1;
         }
     }
+
+    updated_textures.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pack.textures = updated_textures;
+
+    pack.json_files.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+
     rebuild_atlas(pack);
 }
 
-fn get_font_textures(pack: &ResourcePack) -> Vec<String> {
+fn get_font_textures(pack: &FrozenResourcePack) -> Vec<String> {
     let mut font_textures = Vec::new();
-    for font in pack.fonts.iter() {
+    for (_, font) in pack.fonts.iter() {
         for provider in font.providers.iter() {
             if let FontProvider::Bitmap { file, .. } = provider {
                 let id = if file.0.namespace == "minecraft" {
@@ -222,10 +232,10 @@ fn get_font_textures(pack: &ResourcePack) -> Vec<String> {
     font_textures
 }
 
-fn rebuild_atlas(pack: &ResourcePack) {
+fn rebuild_atlas(pack: &mut FrozenResourcePack) {
     let mut item_atlas_exists = false;
     let mut block_atlas_exists = false;
-    for mut atlas in pack.atlases.iter_mut() {
+    for (_, atlas) in pack.atlases.iter_mut() {
         atlas.sources.retain(|source| !matches!(source, Source::Directory { .. } | Source::Single { .. }));
         match atlas.atlas_type {
             AtlasType::Blocks => {
@@ -258,7 +268,7 @@ fn rebuild_atlas(pack: &ResourcePack) {
             }],
             atlas_type: AtlasType::Blocks,
         };
-        pack.atlases.insert(atlas.path(), atlas);
+        pack.atlases.push((atlas.path(), atlas));
     }
     if !item_atlas_exists {
         let atlas = Atlas {
@@ -269,21 +279,17 @@ fn rebuild_atlas(pack: &ResourcePack) {
             }],
             atlas_type: AtlasType::Items,
         };
-        pack.atlases.insert(atlas.path(), atlas);
+        pack.atlases.push((atlas.path(), atlas));
     }
 }
 
 fn rename_models(
-    pack: &ResourcePack,
+    pack: &mut FrozenResourcePack,
     mapping: &mut HashMap<String, String>,
     id_counter: &mapping::IdUsageCounter,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_models));
-    let mut models: Vec<(String, Model)> = pack
-        .models
-        .iter()
-        .map(|entry| (entry.key().clone(), entry.value().clone()))
-        .collect();
+    let mut models = take(&mut pack.models);
 
     models.retain(|(_, x)| {
         !(x.identifier.namespace == "minecraft"
@@ -304,20 +310,25 @@ fn rename_models(
             .then_with(|| a_id.cmp(&b_id))
     });
 
-    for (count, (key, mut model)) in models.into_iter().enumerate() {
+    let mut updated_models = Vec::with_capacity(models.len());
+
+    for (count, (_key, mut model)) in models.into_iter().enumerate() {
         let identifier = model.identifier.to_string();
         if let Some(mapped) = mapping.get(&identifier) {
             model.identifier.path = mapped.clone();
-            pack.models.remove(&key);
-            pack.models.insert(model.path(), model);
+            let new_path = model.path();
+            updated_models.push((new_path, model));
         } else {
             let new_identifier = Identifier::new("_", generate_short_name(count));
             mapping.insert(identifier, new_identifier.to_string());
             model.identifier = new_identifier;
-            pack.models.remove(&key);
-            pack.models.insert(model.path(), model);
+            let new_path = model.path();
+            updated_models.push((new_path, model));
         }
     }
+
+    updated_models.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    pack.models = updated_models;
 }
 
 fn generate_short_name(mut id: usize) -> String {

@@ -18,12 +18,12 @@ impl Shader {
     }
 
     pub fn optimize(
-        &mut self,
+        &self,
         options: &crate::options::Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
-    ) {
+    ) -> String {
         if options.shader_compression == ShaderCompression::None {
-            return;
+            return self.content.clone();
         }
         match Minifier::default().minify(
             &self.content,
@@ -31,8 +31,9 @@ impl Shader {
         ) {
             Ok(minified_code) => {
                 if !minified_code.is_empty() && minified_code != self.content {
-                    self.content = minified_code;
+                    return minified_code;
                 }
+                self.content.clone()
             }
             Err(e) => {
                 let _ = logger.send(LogMessage {
@@ -42,6 +43,7 @@ impl Shader {
                         self.path, e
                     ),
                 });
+                self.content.clone()
             }
         }
     }

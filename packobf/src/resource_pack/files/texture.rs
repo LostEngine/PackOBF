@@ -1,13 +1,12 @@
-use std::time::Duration;
+use crate::cache::{Cache, ItemType};
+use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
+use crate::png::zopfli_png_idat_rewriter::rewrite_idat_with_zopfli;
+use crate::png::{crc, recoverer};
+use crate::{profile_scope, LogLevel, LogMessage};
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, PngError, StripChunks};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::UnboundedSender;
-use crate::cache::{Cache, ItemType};
-use crate::{profile_scope, LogLevel, LogMessage};
-use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
-use crate::png::{crc, recoverer};
-use crate::png::zopfli_png_idat_rewriter::rewrite_idat_with_zopfli;
 
 #[derive(Clone, Debug)]
 pub struct Texture {
@@ -20,18 +19,18 @@ impl Texture {
     }
 
     pub fn optimize(
-        &mut self,
+        &self,
         options: &Options,
         logger: &UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
         path: &str,
-    ) {
-        self.bytes =
+    ) -> Vec<u8> {
+        let bytes =
             Self::cache_or_optimize(&self.bytes, options, logger, cache, path);
         if options.corrupt_png_files {
             match crc::modify_png_crcs(&self.bytes) {
                 Ok(bytes) => {
-                    self.bytes = bytes;
+                    return bytes;
                 }
                 Err(e) => {
                     let _ = logger.send(LogMessage {
@@ -45,6 +44,7 @@ impl Texture {
                 }
             }
         }
+        bytes
     }
 
     fn cache_or_optimize(
@@ -196,7 +196,7 @@ static FASTEST_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Libdeflater { compression: 6 }, // 6: default compression level
     fast_evaluation: true,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 
@@ -229,7 +229,7 @@ static FAST_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Libdeflater { compression: 12 }, // 12: max compression level for libdeflater
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 
@@ -264,7 +264,7 @@ static ANALYZE_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Libdeflater { compression: 9 },
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 
@@ -297,7 +297,7 @@ static ULTRA_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     strip: StripChunks::All,
     deflater: Deflater::Zopfli(ULTRA_ZOPFLI_OPTIONS.to_owned()),
     fast_evaluation: false,
-    timeout: Some(Duration::from_secs(3)),
+    timeout: None,
     max_decompressed_size: None,
 });
 //</editor-fold>

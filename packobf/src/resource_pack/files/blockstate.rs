@@ -107,7 +107,7 @@ impl Blockstate {
     pub fn path(&self) -> String {
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
-            x => format!("{}/", x),
+            x => format!("{x}/"),
         };
         format!(
             "{}assets/{}/blockstates/{}.json",

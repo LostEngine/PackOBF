@@ -19,11 +19,11 @@ impl UnknownTexture {
     }
 
     pub fn optimize(
-        &mut self,
+        &self,
         options: &Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
-    ) {
-        self.texture.optimize(options, logger, cache, self.path.as_str());
+    ) -> Vec<u8> {
+        self.texture.optimize(options, logger, cache, self.path.as_str())
     }
 }

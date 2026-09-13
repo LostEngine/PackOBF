@@ -1,6 +1,6 @@
 use crate::minecraft::builtin_files;
 use crate::resource_pack::mapping;
-use crate::resource_pack::pack::ResourcePack;
+use crate::resource_pack::pack::FrozenResourcePack;
 use crate::LogLevel::Warning;
 use crate::{profile_scope, LogMessage};
 use dashmap::DashMap;
@@ -8,7 +8,7 @@ use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
 
-pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
+pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePack) {
     profile_scope!(std::any::type_name_of_val(&check_usage));
     let counter = mapping::get_id_usage_counter();
 
@@ -43,26 +43,26 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &ResourcePack) {
 fn check_category<T>(
     logger: &UnboundedSender<LogMessage>,
     label: &str,
-    pack_map: &DashMap<String, T>,
+    vec: &Vec<(String, T)>,
     counter_map: &DashMap<String, AtomicUsize>,
     get_id: impl Fn(&T) -> String + Sync + Send,
     is_built_in: impl Fn(&str) -> bool + Sync + Send,
 ) where
     T: Sync + Send + 'static,
 {
-    let ids_in_pack: HashSet<String> = pack_map.iter().map(|entry| get_id(entry.value())).collect();
+    let ids_in_pack: HashSet<String> = vec.iter().map(|entry| get_id(&entry.1)).collect();
 
     let ids_referenced: HashSet<String> = counter_map
         .iter()
         .map(|entry| entry.key().clone())
         .collect();
 
-    for entry in pack_map {
-        let id = get_id(entry.value());
+    for (path, item) in vec {
+        let id = get_id(item);
         if !ids_referenced.contains(&id) {
             let _ = logger.send(LogMessage {
                 level: Warning,
-                message: format!("Unused {}: {} (File: {})", label, id, entry.key()),
+                message: format!("Unused {}: {} (File: {})", label, id, path),
             });
         }
     }

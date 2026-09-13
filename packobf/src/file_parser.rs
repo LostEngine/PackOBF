@@ -156,7 +156,7 @@ fn parse_resource_pack_file(
                     Err(_) => {
                         let _ = logger.send(LogMessage {
                             level: Error,
-                            message: format!("Unknown atlas type '{}'", name,),
+                            message: format!("Unknown atlas type '{name}'"),
                         });
                         pack.unknown_file(ResourcePackFile::new(
                             name.to_owned(),
@@ -232,7 +232,7 @@ fn parse_utf8_or_unknown_file<'a>(
         Err(e) => {
             let _ = logger.send(LogMessage {
                 level: Error,
-                message: format!("Invalid UTF-8 in '{}': {}", name, e),
+                message: format!("Invalid UTF-8 in '{name}': {e}"),
             });
             pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
             None
@@ -249,10 +249,7 @@ fn handle_parse_error(
 ) {
     let _ = logger.send(LogMessage {
         level: Error,
-        message: format!(
-            "Could not parse '{}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {}",
-            name, error
-        ),
+        message: format!("Could not parse '{name}'. This is most likely not a packobf issue but a json file that is malformed. Treating it as an unknown file. Error: {error}"),
     });
     pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));
 }
