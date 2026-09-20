@@ -8,6 +8,8 @@ members = [
 resolver = "3"
 
 [patch.crates-io]
+oxipng = { git = "https://github.com/LostEngine/oxipng" }
+
 glsl-lang = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
 glsl-lang-pp = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }
 glsl-lang-lexer = { git = "https://github.com/LostEngine/patched-libraries", branch = "alixinne/glsl-lang" }

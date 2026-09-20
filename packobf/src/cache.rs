@@ -1,4 +1,3 @@
-use crate::options::Compression;
 use crate::profile_scope;
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
@@ -9,7 +8,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 const MAGIC_NUMBER: [u8; 10] = *b"PACKOBF001"; // Increase version number each time compression is changed (hex number)
 
 pub struct CachedItem {
-    pub compression: Compression,
+    pub compression: u8,
     pub data: Vec<u8>,
 }
 
@@ -108,7 +107,7 @@ impl Cache {
             // Read Compression
             let mut comp_byte = [0u8; 1];
             reader.read_exact(&mut comp_byte)?;
-            let compression = Compression::from_u8(comp_byte[0]);
+            let compression = comp_byte[0];
 
             // Read Data Length and then the Data
             let mut data_len_bytes = [0u8; 8];
@@ -155,7 +154,7 @@ impl Cache {
         self.items.insert(
             CachedItemKey { hash, item_type },
             CachedItem {
-                compression: Compression::from_u8(compression),
+                compression,
                 data: data.into(),
             },
         );
@@ -163,18 +162,18 @@ impl Cache {
 
     pub fn add_item_hash(
         &self,
-        hash: &[u8; 32],
+        hash: [u8; 32],
         data: impl Into<Vec<u8>>,
         compression: u8,
         item_type: ItemType,
     ) {
         self.items.insert(
             CachedItemKey {
-                hash: *hash,
+                hash,
                 item_type,
             },
             CachedItem {
-                compression: Compression::from_u8(compression),
+                compression,
                 data: data.into(),
             },
         );

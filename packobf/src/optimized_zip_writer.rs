@@ -1,13 +1,14 @@
 use crate::cache::{Cache, ItemType};
-use crate::options::{analyze_and_get_zopfli_config_best, analyze_and_get_zopfli_config_normal, Compression, Options, PreCheckResult, ULTRA_ZOPFLI_OPTIONS};
+use crate::deflate::libdeflater::libdeflater_deflate;
+use crate::deflate::zopfli::zopfli_deflate;
+use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
 use crate::profile_scope;
 use byteorder::{LittleEndian, WriteBytesExt};
 use dashmap::DashMap;
-use libdeflater::CompressionLvl;
 use sha2::{Digest, Sha256};
 use std::io::{self, Error, Seek, Write};
 use std::sync::{Arc, Mutex};
-use crate::options::PreCheckResult::{CompressWithZopfli, Skip};
+use crate::deflate::dynamic::{dynamic_deflate, Level};
 
 #[derive(Clone, Debug)]
 pub struct CachedFileData {
@@ -51,14 +52,14 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         options: &Options,
         cache: &Option<Cache>,
     ) -> io::Result<()> {
-        profile_scope!(std::any::type_name_of_val(&OptimizedZipWriter::<W>::add_file));
+        profile_scope!(std::any::type_name_of_val(&Self::add_file));
         let mut sha256 = Sha256::new();
         sha256.update(data);
         let hash: [u8; 32] = sha256.finalize().into();
 
         let existing_match = self.content_cache.get(&hash).map(|r| r.clone());
         if let Some(cached_data) = existing_match {
-            let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+            let mut inner = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
             return self.record_entry(&mut inner, filename, cached_data);
         }
@@ -77,7 +78,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
             8 // Deflate
         };
 
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
         // Record the precise start offset for the Local File Header
         let header_offset = inner.writer.stream_position()? as u32;
@@ -129,7 +130,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         if let Some(cache) = cache {
             if let Some(bytes) = cache
                 .with_item(hash, ItemType::Generic, |it| {
-                    (it.compression as u8 >= options.compression.clone() as u8)
+                    (it.compression as u8 >= options.compression as u8)
                         .then(|| it.data.clone())
                 })
                 .flatten()
@@ -140,137 +141,77 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         let input_size = data.len();
         Ok(match options.compression {
             Compression::Fastest => {
-                let mut compressor = libdeflater::Compressor::default();
-                let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
-                let size = compressor
-                    .deflate_compress(data, &mut out)
-                    .map_err(|_| Error::other("Compression failed"))?;
-                out.truncate(size);
+                let mut out = libdeflater_deflate(data, 6)?;
                 let out_size = out.len();
                 if out_size > input_size {
                     out = vec![];
                 }
                 if let Some(cache) = cache {
                     cache.add_item_hash(
-                        hash,
+                        *hash,
                         &*out,
                         Compression::Fastest as u8,
                         ItemType::Generic,
-                    )
+                    );
                 }
                 out
             }
             Compression::Fast => {
-                let mut compressor = libdeflater::Compressor::new(CompressionLvl::best());
-                let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
-                let size = compressor
-                    .deflate_compress(data, &mut out)
-                    .map_err(|_| Error::other("Compression failed"))?;
-                out.truncate(size);
+                let mut out = libdeflater_deflate(data, 12)?;
                 let out_size = out.len();
                 if out_size > input_size {
                     out = vec![];
                 }
                 if let Some(cache) = cache {
                     cache.add_item_hash(
-                        hash,
+                        *hash,
                         &*out,
                         Compression::Fast as u8,
                         ItemType::Generic,
-                    )
+                    );
                 }
                 out
             }
             Compression::Normal => {
-                let pre_check_result = analyze_and_get_zopfli_config_normal(data);
-                Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
+                let out = dynamic_deflate(data, Level::Normal, false)?;
+                if let Some(cache) = cache {
+                    cache.add_item_hash(
+                        *hash,
+                        &*out,
+                        Compression::Normal as u8,
+                        ItemType::Generic,
+                    );
+                }
+                out
             }
             Compression::Best => {
-                let pre_check_result = analyze_and_get_zopfli_config_best(data);
-                Self::compress_with_pre_check(data, hash, cache, input_size, pre_check_result)?
+                let out = dynamic_deflate(data, Level::Best, false)?;
+                if let Some(cache) = cache {
+                    cache.add_item_hash(
+                        *hash,
+                        &*out,
+                        Compression::Best as u8,
+                        ItemType::Generic,
+                    );
+                }
+                out
             }
             Compression::Ultra => {
-                let mut encoder = zopfli::DeflateEncoder::new(
-                    ULTRA_ZOPFLI_OPTIONS.to_owned(),
-                    zopfli::BlockType::Dynamic,
-                    Vec::new(),
-                );
-                encoder.write_all(data)?;
-                let mut out = encoder.finish()?;
+                let mut out = zopfli_deflate(data, *ULTRA_ZOPFLI_OPTIONS)?;
                 let out_size = out.len();
                 if out_size > input_size {
                     out = vec![];
                 }
                 if let Some(cache) = cache {
                     cache.add_item_hash(
-                        hash,
+                        *hash,
                         &*out,
                         Compression::Ultra as u8,
                         ItemType::Generic,
-                    )
+                    );
                 }
                 out
             }
-        })
-    }
-
-    fn compress_with_pre_check(data: &[u8], hash: &[u8; 32], cache: &Option<Cache>, input_size: usize, pre_check_result: PreCheckResult) -> Result<Vec<u8>, Error> {
-        Ok(match pre_check_result {
-            CompressWithZopfli(options) => {
-                let mut encoder = zopfli::DeflateEncoder::new(
-                    options,
-                    zopfli::BlockType::Dynamic,
-                    Vec::new(),
-                );
-                encoder.write_all(data)?;
-                let mut out = encoder.finish()?;
-                let out_size = out.len();
-                if out_size > input_size {
-                    out = vec![];
-                }
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        hash,
-                        &*out,
-                        Compression::Best as u8,
-                        ItemType::Generic,
-                    )
-                }
-                out
-            }
-            PreCheckResult::LibDeflater => {
-                let mut compressor = libdeflater::Compressor::new(CompressionLvl::best());
-                let mut out = vec![0u8; compressor.deflate_compress_bound(data.len())];
-                let size = compressor
-                    .deflate_compress(data, &mut out)
-                    .map_err(|_| Error::other("Compression failed"))?;
-                out.truncate(size);
-                let out_size = out.len();
-                if out_size > input_size {
-                    out = vec![];
-                }
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        hash,
-                        &*out,
-                        Compression::Fast as u8,
-                        ItemType::Generic,
-                    )
-                }
-                out
-            },
-            Skip => {
-                let out = vec![];
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        hash,
-                        &*out,
-                        Compression::Best as u8,
-                        ItemType::Generic,
-                    )
-                }
-                out
-            },
         })
     }
 
@@ -292,8 +233,8 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
     /// Writes the Central Directory and End of Central Directory (EOCD) records.
     /// This finalizes the ZIP file, making it valid for CD-parsing tools.
     pub fn finish(&self) -> io::Result<()> {
-        profile_scope!(std::any::type_name_of_val(&OptimizedZipWriter::<W>::finish));
-        let mut inner_guard = self.inner.lock().unwrap_or_else(|e| e.into_inner());
+        profile_scope!(std::any::type_name_of_val(&Self::finish));
+        let mut inner_guard = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let Inner {
             ref mut writer,
             ref cd_entries,

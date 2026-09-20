@@ -3,7 +3,6 @@ pub mod file_parser;
 pub mod minecraft;
 pub mod optimized_zip_writer;
 pub mod options;
-pub mod png;
 pub mod profiler;
 pub mod renamer;
 pub mod resource_pack;
@@ -12,10 +11,22 @@ pub mod usage_checker;
 pub mod utils;
 pub mod overlay_remover;
 pub mod version;
+pub mod deflate;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;
 use crate::options::{Options, ShaderCompression};
+use crate::resource_pack::files::asset_texture::AssetTexture;
+use crate::resource_pack::files::atlas::Atlas;
+use crate::resource_pack::files::blockstate::Blockstate;
+use crate::resource_pack::files::font::Font;
+use crate::resource_pack::files::item::Item;
+use crate::resource_pack::files::json::Json;
+use crate::resource_pack::files::model::Model;
+use crate::resource_pack::files::shader::Shader;
+use crate::resource_pack::files::sound::Sound;
+use crate::resource_pack::files::sound_definitions::SoundDefinitions;
+use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::identifier::Identifier;
 use crate::resource_pack::mapping;
 use crate::resource_pack::mapping::{IdUsageCounter, Mapping};
@@ -27,7 +38,7 @@ use rayon::ThreadPoolBuilder;
 use std::borrow::Cow;
 use std::error::Error;
 use std::io::{Cursor, Read};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::sync::watch::Sender;
@@ -99,7 +110,7 @@ pub fn process_zip(
         // `\0` (null) is universally disallowed inside filenames, but Minecraft doesn't care
     }
 
-    let cache = if let Some(cache) = cache_file {
+    let cache = cache_file.as_ref().map_or_else(|| None, |cache| {
         let _ = logger.send(LogMessage {
             level: Info,
             message: format!("Loading cache from {cache}"),
@@ -123,9 +134,7 @@ pub fn process_zip(
             }
         };
         Some(cache)
-    } else {
-        None
-    };
+    });
 
     pool.install(|| {
         let optimize_shaders = options.shader_compression != ShaderCompression::None;
@@ -148,141 +157,94 @@ pub fn process_zip(
             + pack.sound_definitions.len()
             + pack.atlases.len();
 
-        let off_unkn_tex = pack.textures.len();
-        let off_sounds = off_unkn_tex + pack.unknown_textures.len();
-        let off_shaders = off_sounds + pack.sounds.len();
-        let off_models = off_shaders + pack.shaders.len();
-        let off_jsons = off_models + pack.models.len();
-        let off_blockstates = off_jsons + pack.json_files.len();
-        let off_fonts = off_blockstates + pack.blockstates.len();
-        let off_items = off_fonts + pack.fonts.len();
-        let off_sound_defs = off_items + pack.items.len();
-        let off_atlases = off_sound_defs + pack.sound_definitions.len();
-        let off_unknown_files = off_atlases + pack.atlases.len();
+        let opt_counter = AtomicU32::new(0);
+        let build_counter = AtomicU32::new(0);
 
-        let tex_slice = pack.textures.as_mut_slice();
-        let unkn_tex_slice = pack.unknown_textures.as_mut_slice();
-        let sounds_slice = pack.sounds.as_mut_slice();
-        let shaders_slice = pack.shaders.as_mut_slice();
-        let models_slice = pack.models.as_slice();
-        let jsons_slice = pack.json_files.as_slice();
-        let blockstates_slice = pack.blockstates.as_slice();
-        let fonts_slice = pack.fonts.as_slice();
-        let items_slice = pack.items.as_slice();
-        let sound_defs_slice = pack.sound_definitions.as_slice();
-        let atlases_slice = pack.atlases.as_slice();
-        let unknown_files_slice = pack.unknown_files.as_slice();
+        enum PackItem {
+            AssetTexture(String, AssetTexture),
+            UnknownTexture(String, UnknownTexture),
+            Sound(String, Sound),
+            Shader(String, Shader),
+            Model(String, Model),
+            Json(String, Json),
+            Blockstate(String, Blockstate),
+            Font(String, Font),
+            Item(String, Item),
+            SoundDefinitions(String, SoundDefinitions),
+            Atlas(String, Atlas),
+            GenericFile(String, Vec<u8>),
+        }
 
-        let boundaries = [
-            off_unkn_tex,
-            off_sounds,
-            off_shaders,
-            off_models,
-            off_jsons,
-            off_blockstates,
-            off_fonts,
-            off_items,
-            off_sound_defs,
-            off_atlases,
-            off_unknown_files,
-        ];
+        let items = std::iter::empty()
+            .chain(pack.textures.into_iter().map(|(n, t)| PackItem::AssetTexture(n, t)))
+            .chain(pack.unknown_textures.into_iter().map(|(n, ut)| PackItem::UnknownTexture(n, ut)))
+            .chain(pack.sounds.into_iter().map(|(n, s)| PackItem::Sound(n, s)))
+            .chain(pack.shaders.into_iter().map(|(n, s)| if optimize_shaders {
+                PackItem::Shader(n, s)
+            } else {
+                PackItem::GenericFile(n, s.content.into_bytes())
+            }))
+            .chain(pack.models.into_iter().map(|(n, m)| PackItem::Model(n, m)))
+            .chain(pack.json_files.into_iter().map(|(n, j)| PackItem::Json(n, j)))
+            .chain(pack.blockstates.into_iter().map(|(n, b)| PackItem::Blockstate(n, b)))
+            .chain(pack.fonts.into_iter().map(|(n, f)| PackItem::Font(n, f)))
+            .chain(pack.items.into_iter().map(|(n, i)| PackItem::Item(n, i)))
+            .chain(pack.sound_definitions.into_iter().map(|(n, sd)| PackItem::SoundDefinitions(n, sd)))
+            .chain(pack.atlases.into_iter().map(|(n, a)| PackItem::Atlas(n, a)))
+            .chain(pack.unknown_files.into_iter().map(|(n, u)| PackItem::GenericFile(n, u.bytes)));
 
-        let opt_counter = AtomicUsize::new(0);
-        let build_counter = AtomicUsize::new(0);
-        let i = AtomicUsize::new(0);
-
-        (0..total_files).into_par_iter().for_each(|_| {
-            let i = i.fetch_add(1, Ordering::Relaxed);
-            let category = boundaries.partition_point(|&b| i >= b);
-            let (raw_path, bytes): (&str, Cow<'_, [u8]>) = match category {
-                0 => {
-                    let (name, t) = &tex_slice[i];
+        items.par_bridge().for_each(|item| {
+            let (raw_path, bytes): (String, Cow<'_, [u8]>) = match item {
+                PackItem::AssetTexture(name, t) => {
                     let _ = progress.send(Progress::Optimizing {
-                        current: name.to_string(),
+                        current: name.clone(),
                         index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize,
+                        total: total_to_optimize as u32,
                     });
-                    (name.as_str(), Cow::Owned(t.optimize(options, logger, &cache)))
+                    (name, Cow::Owned(t.optimize(options, logger, &cache)))
                 }
-                1 => {
-                    let local_i = i - off_unkn_tex;
-                    let (name, ut) = &unkn_tex_slice[local_i];
+                PackItem::UnknownTexture(name, ut) => {
                     let _ = progress.send(Progress::Optimizing {
-                        current: name.to_string(),
+                        current: name.clone(),
                         index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize,
+                        total: total_to_optimize as u32,
                     });
-                    (name.as_str(), Cow::Owned(ut.optimize(options, logger, &cache)))
+                    (name, Cow::Owned(ut.optimize(options, logger, &cache)))
                 }
-                2 => {
-                    let local_i = i - off_sounds;
-                    let (name, s) = &sounds_slice[local_i];
+                PackItem::Sound(name, s) => {
                     let _ = progress.send(Progress::Optimizing {
-                        current: name.to_string(),
+                        current: name.clone(),
                         index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize,
+                        total: total_to_optimize as u32,
                     });
-                    (name.as_str(), Cow::Owned(s.optimize(logger, &cache)))
+                    (name, Cow::Owned(s.optimize(logger, &cache)))
                 }
-                3 => {
-                    let local_i = i - off_shaders;
-                    let (name, s) = &shaders_slice[local_i];
+                PackItem::Shader(name, s) => {
                     if optimize_shaders {
                         let _ = progress.send(Progress::Optimizing {
-                            current: name.to_string(),
+                            current: name.clone(),
                             index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                            total: total_to_optimize,
+                            total: total_to_optimize as u32,
                         });
                     }
-                    (name.as_str(), Cow::Owned(s.optimize(options, logger).into_bytes()))
+                    (name, Cow::Owned(s.optimize(options, logger).into_bytes()))
                 }
-                4 => {
-                    let local_i = i - off_models;
-                    let (name, m) = &models_slice[local_i];
-                    (name.as_str(), Cow::Owned(m.to_string().into_bytes()))
-                }
-                5 => {
-                    let local_i = i - off_jsons;
-                    let (name, j) = &jsons_slice[local_i];
-                    (name.as_str(), Cow::Owned(j.content.to_string().into_bytes()))
-                }
-                6 => {
-                    let local_i = i - off_blockstates;
-                    let (name, b) = &blockstates_slice[local_i];
-                    (name.as_str(), Cow::Owned(b.to_string().into_bytes()))
-                }
-                7 => {
-                    let local_i = i - off_fonts;
-                    let (name, f) = &fonts_slice[local_i];
-                    (name.as_str(), Cow::Owned(f.to_string().into_bytes()))
-                }
-                8 => {
-                    let local_i = i - off_items;
-                    let (name, item) = &items_slice[local_i];
-                    (name.as_str(), Cow::Owned(item.to_string().into_bytes()))
-                }
-                9 => {
-                    let local_i = i - off_sound_defs;
-                    let (name, sd) = &sound_defs_slice[local_i];
-                    (name.as_str(), Cow::Owned(sd.to_string().into_bytes()))
-                }
-                10 => {
-                    let local_i = i - off_atlases;
-                    let (name, a) = &atlases_slice[local_i];
-                    (name.as_str(), Cow::Owned(a.to_string().into_bytes()))
-                } _ => {
-                    let local_i = i - off_unknown_files;
-                    let (name, u) = &unknown_files_slice[local_i];
-                    (name.as_str(), Cow::Borrowed(u.bytes.as_slice()))
-                }
+                PackItem::Model(name, m) => (name, Cow::Owned(m.to_string().into_bytes())),
+                PackItem::Json(name, j) => (name, Cow::Owned(j.content.to_string().into_bytes())),
+                PackItem::Blockstate(name, b) => (name, Cow::Owned(b.to_string().into_bytes())),
+                PackItem::Font(name, f) => (name, Cow::Owned(f.to_string().into_bytes())),
+                PackItem::Item(name, i) => (name, Cow::Owned(i.to_string().into_bytes())),
+                PackItem::SoundDefinitions(name, sd) => (name, Cow::Owned(sd.to_string().into_bytes())),
+                PackItem::Atlas(name, a) => (name, Cow::Owned(a.to_string().into_bytes())),
+                PackItem::GenericFile(name, u) => (name, Cow::Owned(u)),
             };
 
-            let target_path = resolve_asset_path(raw_path);
+            let target_path = resolve_asset_path(&raw_path);
 
             let _ = progress.send(Progress::Building {
                 current: target_path.as_ref().to_string(),
                 index: build_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                total: total_files,
+                total: total_files as u32,
             });
 
             if let Err(e) = writer.add_file(&target_path, &bytes, options, &cache) {
@@ -333,8 +295,8 @@ fn read_zip_entries(
 
     for i in 0..len {
         let _ = progress.send(Progress::ReadingZip {
-            current: i,
-            total: len,
+            current: i as u32,
+            total: len as u32,
         });
         let mut file = archive.by_index(i)?;
 
@@ -356,21 +318,21 @@ fn read_zip_entries(
 pub enum Progress {
     Idle,
     ReadingZip {
-        current: usize,
-        total: usize,
+        current: u32,
+        total: u32,
     },
     Parsing {
         current: String,
     },
     Optimizing {
         current: String,
-        index: usize,
-        total: usize,
+        index: u32,
+        total: u32,
     },
     Building {
         current: String,
-        index: usize,
-        total: usize,
+        index: u32,
+        total: u32,
     },
     Done,
 }

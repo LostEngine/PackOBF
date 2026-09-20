@@ -9,7 +9,7 @@ zip = "8.5.1"
 serde_json = "1.0.151"
 serde = { version = "1.0.229", features = ["derive"] }
 once_cell = "1.21.4"
-oxipng = { version = "10.2.0", features = ["zopfli"] }
+oxipng = { version = "10.2.1", features = ["zopfli"] }
 dashmap = { version = "6.2.1", features = ["rayon"] }
 tokio = { version = "1.53.1", features = ["full"] }
 glsl-lang = "0.8.1"
@@ -22,13 +22,11 @@ libdeflater = "1.26.0"
 phf = { version = "0.14.0", features = ["macros"] }
 optivorbis = "0.3.2"
 regex = "1.13.1"
-stb_image = "0.3.0"
-image = "0.25.10"
 clap = { version = "4.6.6", features = ["derive"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
 arc-swap = "1"
-dhat = "0.3.3"
+dhat = { version = "0.3.3", optional = true }
 fxhash = "0.2.1"
 
 [build-dependencies]
@@ -37,9 +35,34 @@ phf_codegen = "0.14.0"
 [features]
 default = []
 profiling = []
-dhat-heap = []
+dhat-heap = ["dep:dhat"]
 
 [lints.clippy]
 unwrap_used = "warn"
 expect_used = "warn"
 panic = "warn"
+cloned_instead_of_copied = "warn"
+expl_impl_clone_on_copy = "warn"
+float_cmp_const = "warn"
+if_not_else = "warn"
+ignored_unit_patterns = "warn"
+linkedlist = "warn"
+manual_let_else = "warn"
+map_flatten = "warn"
+map_unwrap_or = "warn"
+match_same_arms = "warn"
+mem_forget = "warn"
+missing_const_for_fn = "warn"
+mut_mut = "warn"
+mutex_integer = "warn"
+needless_continue = "warn"
+option_if_let_else = "warn"
+path_buf_push_overwrite = "warn"
+range_plus_one = "warn"
+redundant_clone = "warn"
+redundant_closure_for_method_calls = "warn"
+semicolon_if_nothing_returned = "warn"
+unnecessary_semicolon = "warn"
+unseparated_literal_suffix = "warn"
+use_self = "warn"
+useless_let_if_seq = "warn"

@@ -19,7 +19,7 @@ impl UnknownTexture {
     }
 
     pub fn optimize(
-        &self,
+        self,
         options: &Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,

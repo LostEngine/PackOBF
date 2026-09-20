@@ -29,12 +29,13 @@ impl AssetTexture {
     }
 
     pub fn optimize(
-        &self,
+        self,
         options: &Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
     ) -> Vec<u8> {
-        self.texture.optimize(options, logger, cache, self.path().as_str())
+        let path = self.path();
+        self.texture.optimize(options, logger, cache, &path)
     }
 
     pub fn path(&self) -> String {

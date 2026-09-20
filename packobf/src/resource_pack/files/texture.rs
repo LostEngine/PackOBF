@@ -1,12 +1,13 @@
 use crate::cache::{Cache, ItemType};
+use crate::deflate::libdeflater::libdeflater_zlib;
 use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
-use crate::png::zopfli_png_idat_rewriter::rewrite_idat_with_zopfli;
-use crate::png::{crc, recoverer};
 use crate::{profile_scope, LogLevel, LogMessage};
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, PngError, StripChunks};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::UnboundedSender;
+use crate::deflate::dynamic::{dynamic_zlib, Level};
+use crate::deflate::zopfli::zopfli_zlib;
 
 #[derive(Clone, Debug)]
 pub struct Texture {
@@ -14,55 +15,30 @@ pub struct Texture {
 }
 
 impl Texture {
-    pub fn new(bytes: Vec<u8>) -> Self {
+    pub const fn new(bytes: Vec<u8>) -> Self {
         Self { bytes }
     }
 
     pub fn optimize(
-        &self,
+        self,
         options: &Options,
         logger: &UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
         path: &str,
     ) -> Vec<u8> {
-        let bytes =
-            Self::cache_or_optimize(&self.bytes, options, logger, cache, path);
-        if options.corrupt_png_files {
-            match crc::modify_png_crcs(&self.bytes) {
-                Ok(bytes) => {
-                    return bytes;
-                }
-                Err(e) => {
-                    let _ = logger.send(LogMessage {
-                        level: LogLevel::Warning,
-                        message: format!(
-                            "Could not corrupt image '{}'. Error: {}",
-                            path,
-                            e
-                        ),
-                    });
-                }
-            }
-        }
-        bytes
-    }
+        profile_scope!(std::any::type_name_of_val(&Self::optimize));
 
-    fn cache_or_optimize(
-        bytes: &[u8],
-        options: &Options,
-        logger: &UnboundedSender<LogMessage>,
-        cache: &Option<Cache>,
-        path: &str,
-    ) -> Vec<u8> {
-        profile_scope!(std::any::type_name_of_val(&Self::cache_or_optimize));
-        if let Some(cache) = cache {
+        let cache_data: Option<(&Cache, [u8; 32])> = cache.as_ref().map(|c| {
             let mut sha256 = Sha256::new();
-            sha256.update(bytes);
-            let hash: [u8; 32] = sha256.finalize().into();
-
-            if let Some(bytes) = cache
-                .with_item(&hash, ItemType::Image, |it| {
-                    (it.compression as u8 >= options.compression as u8)
+            sha256.update(&self.bytes);
+            let hash = sha256.finalize().into();
+            (c, hash)
+        });
+        let compression_value = CompressionValue::new(options.compression, options.corrupt_png_files);
+        if let Some(cache_data) = cache_data {
+            if let Some(bytes) = cache_data.0
+                .with_item(&cache_data.1, ItemType::Image, |it| {
+                    compression_value.is_compatible_with(CompressionValue::from(it.compression))
                         .then(|| it.data.clone())
                 })
                 .flatten()
@@ -75,29 +51,35 @@ impl Texture {
             }
         }
 
-        let oxipng_options = match options.compression {
-            Compression::Fastest => FASTEST_OPTIONS.clone(),
-            Compression::Fast => FAST_OPTIONS.clone(),
-            Compression::Normal => ANALYZE_OPTIONS.clone(),
-            Compression::Best => ANALYZE_OPTIONS.clone(),
-            Compression::Ultra => ULTRA_OPTIONS.clone(),
+        let mut oxipng_options = OPTIONS.clone();
+        oxipng_options.disable_checksums = options.corrupt_png_files;
+        oxipng_options.deflater = match options.compression {
+            Compression::Fastest => Deflater::Custom(|input, disable_checksums| {
+                libdeflater_zlib(input, 6, !disable_checksums).map_err(|_| PngError::InvalidData)
+            }),
+            Compression::Fast => Deflater::Custom(|input, disable_checksums| {
+                libdeflater_zlib(input, 12, !disable_checksums).map_err(|_| PngError::InvalidData)
+            }),
+            Compression::Normal => Deflater::Custom(|input, disable_checksums| {
+                dynamic_zlib(input, Level::Normal, !disable_checksums).map_err(|_| PngError::InvalidData)
+            }),
+            Compression::Best => Deflater::Custom(|input, disable_checksums| {
+                dynamic_zlib(input, Level::Best, !disable_checksums).map_err(|_| PngError::InvalidData)
+            }),
+            Compression::Ultra => Deflater::Custom(|input, disable_checksums| {
+                zopfli_zlib(input, *ULTRA_ZOPFLI_OPTIONS, !disable_checksums).map_err(|_| PngError::InvalidData)
+            }),
         };
 
-        match optimize(bytes, &oxipng_options, &options.compression, logger) {
+        match optimize_from_memory(&self.bytes, &oxipng_options) {
             Ok(value) => {
-                match options.compression {
-                    Compression::Normal | Compression::Best => {
-
-                    }
-                    _ => {}
-                }
-                if let Some(cache) = cache {
-                    cache.add_item(
-                        bytes,
+                if let Some(cache_data) = cache_data {
+                    cache_data.0.add_item_hash(
+                        cache_data.1,
                         &*value,
-                        options.compression as u8,
+                        compression_value.into(),
                         ItemType::Image,
-                    )
+                    );
                 }
                 value
             }
@@ -105,69 +87,55 @@ impl Texture {
                 let _ = logger.send(LogMessage {
                     level: LogLevel::Info,
                     message: format!(
-                        "Could not optimize image '{}'. Trying to recover it. Error: {}",
+                        "Could not optimize image '{}'. Skipping optimization. Error: {}",
                         path, e
                     ),
                 });
-                match recoverer::recover_png(bytes) {
-                    Ok(value) => {
-                        let _ = logger.send(LogMessage {
-                            level: LogLevel::Info,
-                            message: format!("Image '{}' was recovered successfully.", path),
-                        });
-                        match optimize(value.as_slice(), &oxipng_options, &options.compression, logger) {
-                            Ok(value) => {
-                                if let Some(cache) = cache {
-                                    cache.add_item(
-                                        bytes,
-                                        &*value,
-                                        options.compression as u8,
-                                        ItemType::Image,
-                                    )
-                                }
-                                value
-                            }
-                            Err(e) => {
-                                let _ = logger.send(LogMessage {
-                                    level: LogLevel::Warning,
-                                    message: format!(
-                                        "Could not optimize image '{}'. Skipping optimization. Error: {}",
-                                        path,
-                                        e),
-                                });
-                                value
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let _ = logger.send(LogMessage {
-                            level: LogLevel::Warning,
-                            message: format!(
-                                "Could not recover image '{}'. Skipping optimization. Error: {}",
-                                path, e
-                            ),
-                        });
-                        bytes.to_owned()
-                    }
-                }
+                self.bytes
             }
         }
     }
 }
 
-fn optimize(data: &[u8], opts: &oxipng::Options, compression: &Compression, logger: &UnboundedSender<LogMessage>) -> Result<Vec<u8>, PngError> {
-    let mut data = optimize_from_memory(data, &opts)?;
-    match compression {
-        Compression::Normal | Compression::Best => {
-            data = rewrite_idat_with_zopfli(data.as_slice(), compression, logger);
-        }
-        _ => {}
-    }
-    Ok(data)
+struct CompressionValue {
+    compression: Compression,
+    corrupt_png_files: bool,
 }
 
-// <editor-fold desc="Oxipng options" defaultstate="collapsed">
-static FASTEST_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
+impl From<u8> for CompressionValue {
+    fn from(value: u8) -> Self {
+        let corrupt_png_files = value & 0b0001_0000 != 0;
+        let compression = Compression::from_u8(value & 0b0000_1111);
+        Self::new(compression, corrupt_png_files)
+    }
+}
+
+impl From<CompressionValue> for u8 {
+    fn from(value: CompressionValue) -> u8 {
+        value.u8()
+    }
+}
+
+impl CompressionValue {
+    const fn new(compression: Compression, corrupt_png_files: bool) -> Self {
+        Self { compression, corrupt_png_files }
+    }
+
+    const fn u8(&self) -> u8 {
+        let mut value = self.compression as u8;
+        if self.corrupt_png_files {
+            value |= 0b0001_0000;
+        }
+        value
+    }
+
+    const fn is_compatible_with(&self, other: Self) -> bool {
+        self.corrupt_png_files == other.corrupt_png_files && self.compression as u8 <= other.compression as u8
+    }
+
+}
+
+static OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     fix_errors: true,
     force: false,
     filters: indexset! {
@@ -194,111 +162,9 @@ static FASTEST_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     idat_recoding: true,
     scale_16: false,
     strip: StripChunks::All,
-    deflater: Deflater::Libdeflater { compression: 6 }, // 6: default compression level
+    deflater: Deflater::Libdeflater {compression: 6},
     fast_evaluation: true,
     timeout: None,
     max_decompressed_size: None,
+    disable_checksums: false,
 });
-
-static FAST_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
-    fix_errors: true,
-    force: false,
-    filters: indexset! {
-        FilterStrategy::NONE,
-        FilterStrategy::SUB,
-        FilterStrategy::UP,
-        FilterStrategy::AVERAGE,
-        FilterStrategy::PAETH,
-        FilterStrategy::MinSum,
-        FilterStrategy::Entropy,
-        FilterStrategy::Bigrams,
-        FilterStrategy::BigEnt,
-        FilterStrategy::Brute {
-            num_lines: 8,
-            level: 12,
-        },
-    },
-    interlace: Some(false),
-    optimize_alpha: true,
-    bit_depth_reduction: true,
-    color_type_reduction: true,
-    palette_reduction: true,
-    grayscale_reduction: true,
-    idat_recoding: true,
-    scale_16: false,
-    strip: StripChunks::All,
-    deflater: Deflater::Libdeflater { compression: 12 }, // 12: max compression level for libdeflater
-    fast_evaluation: false,
-    timeout: None,
-    max_decompressed_size: None,
-});
-
-/// Libdeflater (Level 9) is used to determine which zopfli options are going to be used.
-/// See [options::analyze](crate::options::analyze).
-static ANALYZE_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
-    fix_errors: true,
-    force: false,
-    filters: indexset! {
-        FilterStrategy::NONE,
-        FilterStrategy::SUB,
-        FilterStrategy::UP,
-        FilterStrategy::AVERAGE,
-        FilterStrategy::PAETH,
-        FilterStrategy::MinSum,
-        FilterStrategy::Entropy,
-        FilterStrategy::Bigrams,
-        FilterStrategy::BigEnt,
-        FilterStrategy::Brute {
-            num_lines: 8,
-            level: 12,
-        },
-    },
-    interlace: Some(false),
-    optimize_alpha: true,
-    bit_depth_reduction: true,
-    color_type_reduction: true,
-    palette_reduction: true,
-    grayscale_reduction: true,
-    idat_recoding: true,
-    scale_16: false,
-    strip: StripChunks::All,
-    deflater: Deflater::Libdeflater { compression: 9 },
-    fast_evaluation: false,
-    timeout: None,
-    max_decompressed_size: None,
-});
-
-static ULTRA_OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
-    fix_errors: true,
-    force: false,
-    filters: indexset! {
-        FilterStrategy::NONE,
-        FilterStrategy::SUB,
-        FilterStrategy::UP,
-        FilterStrategy::AVERAGE,
-        FilterStrategy::PAETH,
-        FilterStrategy::MinSum,
-        FilterStrategy::Entropy,
-        FilterStrategy::Bigrams,
-        FilterStrategy::BigEnt,
-        FilterStrategy::Brute {
-            num_lines: 8,
-            level: 12,
-        },
-    },
-    interlace: Some(false),
-    optimize_alpha: true,
-    bit_depth_reduction: true,
-    color_type_reduction: true,
-    palette_reduction: true,
-    grayscale_reduction: true,
-    idat_recoding: true,
-    scale_16: false,
-    strip: StripChunks::All,
-    deflater: Deflater::Zopfli(ULTRA_ZOPFLI_OPTIONS.to_owned()),
-    fast_evaluation: false,
-    timeout: None,
-    max_decompressed_size: None,
-});
-//</editor-fold>
-
