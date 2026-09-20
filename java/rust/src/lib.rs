@@ -31,7 +31,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
         };
 
         let options = if options.is_null() {
-            Options::fastest()
+            Options::normal()
         } else {
             let comp_val = env
                 .get_field(&options, jni_str!("compression"), jni_sig!("I"))?

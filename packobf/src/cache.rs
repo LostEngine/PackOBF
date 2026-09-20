@@ -79,7 +79,7 @@ impl Cache {
         let mut reader = BufReader::new(file);
         let items = DashMap::new();
 
-        let mut magic = [0u8; 10];
+        let mut magic = [0_u8; 10];
         reader.read_exact(&mut magic)?;
 
         if magic != MAGIC_NUMBER {
@@ -90,33 +90,33 @@ impl Cache {
         }
 
         // Read the number of entries
-        let mut len_bytes = [0u8; 8];
+        let mut len_bytes = [0_u8; 8];
         reader.read_exact(&mut len_bytes)?;
         let count = u64::from_le_bytes(len_bytes);
 
         for _ in 0..count {
             // Read Key
-            let mut hash = [0u8; 32];
+            let mut hash = [0_u8; 32];
             reader.read_exact(&mut hash)?;
 
             // Read Type
-            let mut type_bytes = [0u8; 1];
+            let mut type_bytes = [0_u8; 1];
             reader.read_exact(&mut type_bytes)?;
             let item_type = ItemType::from_u8(type_bytes[0]);
 
             // Read Compression
-            let mut comp_byte = [0u8; 1];
+            let mut comp_byte = [0_u8; 1];
             reader.read_exact(&mut comp_byte)?;
             let compression = comp_byte[0];
 
             // Read Data Length and then the Data
-            let mut data_len_bytes = [0u8; 8];
+            let mut data_len_bytes = [0_u8; 8];
             reader.read_exact(&mut data_len_bytes)?;
             let data_len = usize::try_from(u64::from_le_bytes(data_len_bytes)).map_err(|_| {
                 io::Error::new(io::ErrorKind::InvalidData, "Cache entry is too large")
             })?;
 
-            let mut data = vec![0u8; data_len];
+            let mut data = vec![0_u8; data_len];
             reader.read_exact(&mut data)?;
 
             items.insert(

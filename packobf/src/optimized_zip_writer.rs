@@ -1,14 +1,12 @@
 use crate::cache::{Cache, ItemType};
 use crate::deflate::libdeflater::libdeflater_deflate;
-use crate::deflate::zopfli::zopfli_deflate;
-use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
+use crate::options::{Compression, Options};
 use crate::profile_scope;
 use byteorder::{LittleEndian, WriteBytesExt};
 use dashmap::DashMap;
 use sha2::{Digest, Sha256};
 use std::io::{self, Error, Seek, Write};
 use std::sync::{Arc, Mutex};
-use crate::deflate::dynamic::{dynamic_deflate, Level};
 
 #[derive(Clone, Debug)]
 pub struct CachedFileData {
@@ -140,24 +138,8 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         }
         let input_size = data.len();
         Ok(match options.compression {
-            Compression::Fastest => {
-                let mut out = libdeflater_deflate(data, 6)?;
-                let out_size = out.len();
-                if out_size > input_size {
-                    out = vec![];
-                }
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        *hash,
-                        &*out,
-                        Compression::Fastest as u8,
-                        ItemType::Generic,
-                    );
-                }
-                out
-            }
             Compression::Fast => {
-                let mut out = libdeflater_deflate(data, 12)?;
+                let mut out = libdeflater_deflate(data, 6)?;
                 let out_size = out.len();
                 if out_size > input_size {
                     out = vec![];
@@ -173,31 +155,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                 out
             }
             Compression::Normal => {
-                let out = dynamic_deflate(data, Level::Normal, false)?;
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        *hash,
-                        &*out,
-                        Compression::Normal as u8,
-                        ItemType::Generic,
-                    );
-                }
-                out
-            }
-            Compression::Best => {
-                let out = dynamic_deflate(data, Level::Best, false)?;
-                if let Some(cache) = cache {
-                    cache.add_item_hash(
-                        *hash,
-                        &*out,
-                        Compression::Best as u8,
-                        ItemType::Generic,
-                    );
-                }
-                out
-            }
-            Compression::Ultra => {
-                let mut out = zopfli_deflate(data, *ULTRA_ZOPFLI_OPTIONS)?;
+                let mut out = libdeflater_deflate(data, 12)?;
                 let out_size = out.len();
                 if out_size > input_size {
                     out = vec![];
@@ -206,7 +164,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
                     cache.add_item_hash(
                         *hash,
                         &*out,
-                        Compression::Ultra as u8,
+                        Compression::Normal as u8,
                         ItemType::Generic,
                     );
                 }

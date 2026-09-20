@@ -1,13 +1,11 @@
 use crate::cache::{Cache, ItemType};
 use crate::deflate::libdeflater::libdeflater_zlib;
-use crate::options::{Compression, Options, ULTRA_ZOPFLI_OPTIONS};
+use crate::options::{Compression, Options};
 use crate::{profile_scope, LogLevel, LogMessage};
 use once_cell::sync::Lazy;
 use oxipng::{indexset, optimize_from_memory, Deflater, FilterStrategy, PngError, StripChunks};
 use sha2::{Digest, Sha256};
 use tokio::sync::mpsc::UnboundedSender;
-use crate::deflate::dynamic::{dynamic_zlib, Level};
-use crate::deflate::zopfli::zopfli_zlib;
 
 #[derive(Clone, Debug)]
 pub struct Texture {
@@ -54,20 +52,11 @@ impl Texture {
         let mut oxipng_options = OPTIONS.clone();
         oxipng_options.disable_checksums = options.corrupt_png_files;
         oxipng_options.deflater = match options.compression {
-            Compression::Fastest => Deflater::Custom(|input, disable_checksums| {
+            Compression::Fast => Deflater::Custom(|input, disable_checksums| {
                 libdeflater_zlib(input, 6, !disable_checksums).map_err(|_| PngError::InvalidData)
             }),
-            Compression::Fast => Deflater::Custom(|input, disable_checksums| {
-                libdeflater_zlib(input, 12, !disable_checksums).map_err(|_| PngError::InvalidData)
-            }),
             Compression::Normal => Deflater::Custom(|input, disable_checksums| {
-                dynamic_zlib(input, Level::Normal, !disable_checksums).map_err(|_| PngError::InvalidData)
-            }),
-            Compression::Best => Deflater::Custom(|input, disable_checksums| {
-                dynamic_zlib(input, Level::Best, !disable_checksums).map_err(|_| PngError::InvalidData)
-            }),
-            Compression::Ultra => Deflater::Custom(|input, disable_checksums| {
-                zopfli_zlib(input, *ULTRA_ZOPFLI_OPTIONS, !disable_checksums).map_err(|_| PngError::InvalidData)
+                libdeflater_zlib(input, 12, !disable_checksums).map_err(|_| PngError::InvalidData)
             }),
         };
 
