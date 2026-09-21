@@ -71,7 +71,7 @@ impl Sound {
         match remuxer.remux(&mut source, sink) {
             Ok(bytes) => {
                 if let Some(cache) = cache {
-                    cache.add_item(&self.bytes, &*bytes, 0, ItemType::Sound)
+                    cache.add_item(&self.bytes, &*bytes, 0, ItemType::Sound);
                 }
                 bytes
             }

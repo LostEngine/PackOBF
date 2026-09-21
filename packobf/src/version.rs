@@ -18,18 +18,18 @@ pub enum MinecraftVersion {
 }
 
 impl MinecraftVersion {
-    pub fn from_u8(value: u8) -> Option<Self> {
+    pub const fn from_u8(value: u8) -> Option<Self> {
         match value {
-            34 => Some(MinecraftVersion::V1_21_1),
-            42 => Some(MinecraftVersion::V1_21_2),
-            46 => Some(MinecraftVersion::V1_21_4),
-            55 => Some(MinecraftVersion::V1_21_5),
-            63 => Some(MinecraftVersion::V1_21_6),
-            64 => Some(MinecraftVersion::V1_21_7),
-            69 => Some(MinecraftVersion::V1_21_9),
-            75 => Some(MinecraftVersion::V1_21_11),
-            84 => Some(MinecraftVersion::V26_1),
-            88 => Some(MinecraftVersion::V26_2),
+            34 => Some(Self::V1_21_1),
+            42 => Some(Self::V1_21_2),
+            46 => Some(Self::V1_21_4),
+            55 => Some(Self::V1_21_5),
+            63 => Some(Self::V1_21_6),
+            64 => Some(Self::V1_21_7),
+            69 => Some(Self::V1_21_9),
+            75 => Some(Self::V1_21_11),
+            84 => Some(Self::V26_1),
+            88 => Some(Self::V26_2),
             _ => None,
         }
     }

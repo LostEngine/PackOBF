@@ -68,7 +68,7 @@ pub struct FilterPattern {
     path: Option<String>,
 }
 
-fn default_one() -> f32 {
+const fn default_one() -> f32 {
     1.0
 }
 fn is_one(f: &f32) -> bool {
@@ -97,7 +97,7 @@ impl Atlas {
         atlas_type: AtlasType,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut atlas: Atlas = serde_json::from_str(json)?;
+        let mut atlas: Self = serde_json::from_str(json)?;
 
         atlas.overlay = overlay.into();
         atlas.atlas_type = atlas_type;
@@ -147,19 +147,11 @@ impl Atlas {
         if result.is_some() {
             for source in self.sources.iter() {
                 if let Source::Filter { pattern, .. } = source {
-                    let ns_match = match &pattern.namespace {
-                        Some(ns_regex) => Regex::new(ns_regex)
-                            .map(|re| re.is_match(&texture_id.namespace))
-                            .unwrap_or(false),
-                        None => true,
-                    };
+                    let ns_match = pattern.namespace.as_ref().is_none_or( |ns_regex| Regex::new(ns_regex)
+                            .is_ok_and(|re| re.is_match(&texture_id.namespace)));
 
-                    let path_match = match &pattern.path {
-                        Some(path_regex) => Regex::new(path_regex)
-                            .map(|re| re.is_match(&texture_id.path))
-                            .unwrap_or(false),
-                        None => true,
-                    };
+                    let path_match = pattern.path.as_ref().is_none_or(|path_regex| Regex::new(path_regex)
+                            .is_ok_and(|re| re.is_match(&texture_id.path)));
 
                     if ns_match && path_match {
                         return None;

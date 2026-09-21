@@ -74,7 +74,7 @@ impl PackMcmeta {
         serde_json::from_str(json)
     }
 
-    pub fn path(&self) -> &'static str {
+    pub const fn path(&self) -> &'static str {
         "pack.mcmeta"
     }
 }

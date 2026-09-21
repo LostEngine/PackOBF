@@ -15,10 +15,7 @@ pub fn remove_overlays(
     thread_pool: &ThreadPool
 ) {
     let entries = {
-        let mut mcmeta = match pack.pack_mcmeta.take() {
-            Some(mcmeta) => mcmeta,
-            None => return,
-        };
+        let Some(mut mcmeta) = pack.pack_mcmeta.take() else { return };
         let entries = mcmeta
             .overlays
             .as_ref()
@@ -185,7 +182,7 @@ fn strip_overlay(path: &str) -> &str {
     path.split_once('/').map_or(path, |(_, rest)| rest)
 }
 
-fn version(version: &PackVersion) -> (i32, i32) {
+const fn version(version: &PackVersion) -> (i32, i32) {
     match version {
         PackVersion::Integer(major) => (*major, 0),
         PackVersion::Decimal([major, minor]) => (*major, *minor),

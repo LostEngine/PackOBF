@@ -77,13 +77,13 @@ impl std::fmt::Display for Blockstate {
     }
 }
 
-fn is_zero(v: &i32) -> bool {
+const fn is_zero(v: &i32) -> bool {
     *v == 0
 }
-fn default_weight() -> i32 {
+const fn default_weight() -> i32 {
     1
 }
-fn is_default_weight(v: &i32) -> bool {
+const fn is_default_weight(v: &i32) -> bool {
     *v == 1
 }
 fn is_zero_or_older_than_1_21_11(v: &i32) -> bool {
@@ -96,7 +96,7 @@ impl Blockstate {
         identifier: Identifier,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut blockstate: Blockstate = serde_json::from_str(json)?;
+        let mut blockstate: Self = serde_json::from_str(json)?;
 
         blockstate.overlay = overlay.into();
         blockstate.identifier = identifier;

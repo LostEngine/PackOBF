@@ -61,96 +61,78 @@ fn parse_resource_pack_file(
         },
     );
     if name == "pack.mcmeta" {
-        let json_str = match parse_utf8_or_unknown_file(logger, pack, &*name, &*content) {
-            Some(value) => value,
-            None => return,
-        };
+        let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
         match PackMcmeta::from_json(json_str) {
             Ok(value) => {
                 pack.pack_mcmeta(value);
             }
             Err(e) => {
-                handle_parse_error(logger, pack, &*name, &*content, e);
+                handle_parse_error(logger, pack, name, content, e);
             }
         }
     } else if name.ends_with(".json") {
-        match get_type(&name) {
+        match get_type(name) {
             Some("models") => {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                    Some(value) => value,
-                    None => return,
-                };
-                match Model::from_json(overlay, identifier, &json_str) {
+                let (overlay, identifier) = parse_path(name);
+                let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
+                match Model::from_json(overlay, identifier, json_str) {
                     Ok(value) => {
                         pack.model(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, &name, &content, e);
+                        handle_parse_error(logger, pack, name, content, e);
                     }
                 }
             }
             Some("blockstates") => {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                    Some(value) => value,
-                    None => return,
-                };
-                match Blockstate::from_json(overlay, identifier, &json_str) {
+                let (overlay, identifier) = parse_path(name);
+                let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
+                match Blockstate::from_json(overlay, identifier, json_str) {
                     Ok(value) => {
                         pack.blockstate(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, &name, &content, e);
+                        handle_parse_error(logger, pack, name, content, e);
                     }
                 }
             }
             Some("items") => {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                    Some(value) => value,
-                    None => return,
-                };
+                let (overlay, identifier) = parse_path(name);
+                let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
 
-                match Item::from_json(overlay, identifier, &json_str) {
+                match Item::from_json(overlay, identifier, json_str) {
                     Ok(value) => {
                         pack.item(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, &name, &content, e);
+                        handle_parse_error(logger, pack, name, content, e);
                     }
                 }
             }
             Some("font") => {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                    Some(value) => value,
-                    None => return,
-                };
+                let (overlay, identifier) = parse_path(name);
+                let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
 
-                match Font::from_json(overlay, identifier, &json_str) {
+                match Font::from_json(overlay, identifier, json_str) {
                     Ok(value) => {
                         pack.font(value);
                     }
                     Err(e) => {
-                        handle_parse_error(logger, pack, &name, &content, e);
+                        handle_parse_error(logger, pack, name, content, e);
                     }
                 }
             }
             Some("atlases") => {
-                let (overlay, identifier) = parse_path(&name);
-                let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                    Some(value) => value,
-                    None => return,
-                };
+                let (overlay, identifier) = parse_path(name);
+                let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
 
                 match AtlasType::from_str(identifier.path.as_str()) {
-                    Ok(atlas_type) => match Atlas::from_json(overlay, atlas_type, &json_str) {
+                    Ok(atlas_type) => match Atlas::from_json(overlay, atlas_type, json_str) {
                         Ok(value) => {
                             pack.atlas(value);
                         }
                         Err(e) => {
-                            handle_parse_error(logger, pack, &name, &content, e);
+                            handle_parse_error(logger, pack, name, content, e);
                         }
                     },
                     Err(_) => {
@@ -167,43 +149,40 @@ fn parse_resource_pack_file(
             }
             _ => {
                 if name.ends_with("/sounds.json") {
-                    let (overlay, identifier) = parse_path(&name);
-                    let json_str = match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
-                        Some(value) => value,
-                        None => return,
-                    };
-                    match SoundDefinitions::from_json(overlay, identifier.namespace, &json_str) {
+                    let (overlay, identifier) = parse_path(name);
+                    let Some(json_str) = parse_utf8_or_unknown_file(logger, pack, name, content) else { return };
+                    match SoundDefinitions::from_json(overlay, identifier.namespace, json_str) {
                         Ok(value) => {
                             pack.sound_definitions(value);
                         }
                         Err(e) => {
-                            handle_parse_error(logger, pack, &name, &content, e);
+                            handle_parse_error(logger, pack, name, content, e);
                         }
                     }
                 } else {
-                    json_file(logger, pack, &name, &content);
+                    json_file(logger, pack, name, content);
                 }
             }
         }
     } else if name.ends_with(".mcmeta") {
-        json_file(logger, pack, &name, &content);
+        json_file(logger, pack, name, content);
     } else if name.ends_with(".png") {
-        if get_type(&name) == Some("textures") {
-            let (overlay, identifier) = parse_path(&name);
+        if get_type(name) == Some("textures") {
+            let (overlay, identifier) = parse_path(name);
             pack.texture(AssetTexture::new(overlay, identifier, content.to_owned()));
         } else {
-            pack.unknown_texture(UnknownTexture::new(name, content.to_owned()))
+            pack.unknown_texture(UnknownTexture::new(name, content.to_owned()));
         }
     } else if name.ends_with(".vsh") || name.ends_with(".fsh") || name.ends_with(".glsl") {
         pack.shader(Shader::new(
             name.to_owned(),
-            match parse_utf8_or_unknown_file(logger, pack, &name, &content) {
+            match parse_utf8_or_unknown_file(logger, pack, name, content) {
                 Some(value) => value,
                 None => return,
             },
         ));
-    } else if name.ends_with(".ogg") && get_type(&name) == Some("sounds") {
-        let (overlay, identifier) = parse_path(&name);
+    } else if name.ends_with(".ogg") && get_type(name) == Some("sounds") {
+        let (overlay, identifier) = parse_path(name);
         pack.sound(Sound::new(overlay, identifier, content.to_owned()));
     } else {
         pack.unknown_file(ResourcePackFile::new(name.to_owned(), content.to_owned()));

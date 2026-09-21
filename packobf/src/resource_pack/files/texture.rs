@@ -100,7 +100,7 @@ impl From<u8> for CompressionValue {
 }
 
 impl From<CompressionValue> for u8 {
-    fn from(value: CompressionValue) -> u8 {
+    fn from(value: CompressionValue) -> Self {
         value.u8()
     }
 }

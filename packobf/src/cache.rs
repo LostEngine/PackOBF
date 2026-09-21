@@ -27,11 +27,11 @@ pub enum ItemType {
 }
 
 impl ItemType {
-    fn from_u8(value: u8) -> Self {
+    const fn from_u8(value: u8) -> Self {
         match value {
-            1 => ItemType::Image,
-            2 => ItemType::Sound,
-            _ => ItemType::Generic,
+            1 => Self::Image,
+            2 => Self::Sound,
+            _ => Self::Generic,
         }
     }
 }
@@ -62,7 +62,7 @@ impl Cache {
             writer.write_all(&[cached_item_key.item_type as u8])?;
 
             // Write Compression (1 byte)
-            writer.write_all(&[item.compression as u8])?;
+            writer.write_all(&[item.compression])?;
 
             // Write Data Length (u64) and Data
             writer.write_all(&(item.data.len() as u64).to_le_bytes())?;
@@ -125,7 +125,7 @@ impl Cache {
             );
         }
 
-        Ok(Cache { items })
+        Ok(Self { items })
     }
 
     pub fn with_item<F, R>(&self, hash: &[u8; 32], item_type: ItemType, f: F) -> Option<R>

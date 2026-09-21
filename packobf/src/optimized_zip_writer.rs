@@ -128,7 +128,7 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         if let Some(cache) = cache {
             if let Some(bytes) = cache
                 .with_item(hash, ItemType::Generic, |it| {
-                    (it.compression as u8 >= options.compression as u8)
+                    (it.compression >= options.compression as u8)
                         .then(|| it.data.clone())
                 })
                 .flatten()

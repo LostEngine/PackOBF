@@ -99,18 +99,15 @@ impl IdUsageCounter {
             IdCategory::Model => self
                 .model_counter
                 .get(id)
-                .map(|counter| counter.load(Ordering::Relaxed))
-                .unwrap_or(0),
+                .map_or(0, |counter| counter.load(Ordering::Relaxed)),
             IdCategory::Texture => self
                 .texture_counter
                 .get(id)
-                .map(|counter| counter.load(Ordering::Relaxed))
-                .unwrap_or(0),
+                .map_or(0, |counter| counter.load(Ordering::Relaxed)),
             IdCategory::Sound => self
                 .sound_counter
                 .get(id)
-                .map(|counter| counter.load(Ordering::Relaxed))
-                .unwrap_or(0),
+                .map_or(0, |counter| counter.load(Ordering::Relaxed)),
         }
     }
 }

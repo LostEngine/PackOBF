@@ -93,7 +93,7 @@ enum SoundInfoRaw {
 impl From<SoundInfoRaw> for SoundInfo {
     fn from(raw: SoundInfoRaw) -> Self {
         match raw {
-            SoundInfoRaw::SimpleFile(id) => SoundInfo::File {
+            SoundInfoRaw::SimpleFile(id) => Self::File {
                 name: id,
                 volume: default_one(),
                 pitch: default_one(),
@@ -104,9 +104,9 @@ impl From<SoundInfoRaw> for SoundInfo {
             },
             SoundInfoRaw::Full(data) => match data {
                 SoundInfoData::File { name, volume, pitch, weight, stream, attenuation_distance, preload } =>
-                    SoundInfo::File { name, volume, pitch, weight, stream, attenuation_distance, preload },
+                    Self::File { name, volume, pitch, weight, stream, attenuation_distance, preload },
                 SoundInfoData::Event { name, volume, pitch, weight, stream, attenuation_distance, preload, _type } =>
-                    SoundInfo::Event { name, volume, pitch, weight, stream, attenuation_distance, preload },
+                    Self::Event { name, volume, pitch, weight, stream, attenuation_distance, preload },
             },
         }
     }
@@ -118,13 +118,13 @@ impl From<SoundInfo> for SoundInfoRaw {
             SoundInfo::File { name, volume, pitch, weight, stream, attenuation_distance, preload }
             if is_one(&volume) && is_one(&pitch) && is_one_u32(&weight)
                 && !stream && is_16_u32(&attenuation_distance) && !preload => {
-                SoundInfoRaw::SimpleFile(name)
+                Self::SimpleFile(name)
             }
             SoundInfo::File { name, volume, pitch, weight, stream, attenuation_distance, preload } => {
-                SoundInfoRaw::Full(SoundInfoData::File { name, volume, pitch, weight, stream, attenuation_distance, preload })
+                Self::Full(SoundInfoData::File { name, volume, pitch, weight, stream, attenuation_distance, preload })
             }
             SoundInfo::Event { name, volume, pitch, weight, stream, attenuation_distance, preload } => {
-                SoundInfoRaw::Full(SoundInfoData::Event { name, volume, pitch, weight, stream, attenuation_distance, preload, _type: "event".to_string() })
+                Self::Full(SoundInfoData::Event { name, volume, pitch, weight, stream, attenuation_distance, preload, _type: "event".to_string() })
             }
         }
     }
@@ -144,7 +144,7 @@ impl SoundDefinitions {
         namespace: impl Into<String>,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut blockstate: SoundDefinitions = serde_json::from_str(json)?;
+        let mut blockstate: Self = serde_json::from_str(json)?;
 
         blockstate.overlay = overlay.into();
         blockstate.namespace = namespace.into();
@@ -161,15 +161,15 @@ impl SoundDefinitions {
     }
 }
 
-fn default_one() -> f32 {
+const fn default_one() -> f32 {
     1.0
 }
 
-fn default_one_u32() -> u32 {
+const fn default_one_u32() -> u32 {
     1
 }
 
-fn default_16_u32() -> u32 {
+const fn default_16_u32() -> u32 {
     16
 }
 

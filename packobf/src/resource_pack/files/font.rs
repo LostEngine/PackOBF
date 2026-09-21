@@ -99,10 +99,10 @@ impl std::fmt::Display for Font {
     }
 }
 
-fn default_ascent() -> i32 { 7 }
-fn default_height() -> i32 { 8 }
-fn default_size() -> f32 { 11.0 }
-fn default_oversample() -> f32 { 1.5 }
+const fn default_ascent() -> i32 { 7 }
+const fn default_height() -> i32 { 8 }
+const fn default_size() -> f32 { 11.0 }
+const fn default_oversample() -> f32 { 1.5 }
 pub fn is_none_or_older_than_26_1<T>(value: &Option<T>) -> bool {
     value.is_none() || version::is_older_than_26_1(&())
 }
@@ -117,7 +117,7 @@ impl Font {
         identifier: Identifier,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut font: Font = serde_json::from_str(json)?;
+        let mut font: Self = serde_json::from_str(json)?;
 
         font.overlay = overlay.into();
         font.identifier = identifier;

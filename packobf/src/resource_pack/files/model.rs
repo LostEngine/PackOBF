@@ -34,7 +34,7 @@ impl Model {
         identifier: Identifier,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut model: Model = serde_json::from_str(json)?;
+        let mut model: Self = serde_json::from_str(json)?;
 
         model.overlay = overlay.into();
         model.identifier = identifier;

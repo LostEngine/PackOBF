@@ -55,7 +55,7 @@ impl Minifier {
         source: &str,
         rename: bool,
     ) -> Result<String, Box<dyn std::error::Error>> {
-        profile_scope!(std::any::type_name_of_val(&Minifier::minify));
+        profile_scope!(std::any::type_name_of_val(&Self::minify));
         let mut ast =
             TranslationUnit::parse(source).map_err(|e| format!("GLSL Parse Error: {}", e))?;
 
@@ -118,15 +118,11 @@ impl<'a> VisitorMut for NameCollector<'a> {
 
     fn visit_declaration(&mut self, decl: &mut Declaration) -> Visit {
         if let DeclarationData::InitDeclaratorList(list) = &mut decl.content {
-            let is_storage = if let Some(qualifier) = &list.head.ty.content.qualifier {
-                qualifier
+            let is_storage = list.head.ty.content.qualifier.as_ref().is_some_and(|qualifier| qualifier
                     .content
                     .qualifiers
                     .iter()
-                    .any(|q| matches!(q.content, TypeQualifierSpecData::Storage(_)))
-            } else {
-                false
-            };
+                    .any(|q| matches!(q.content, TypeQualifierSpecData::Storage(_))));
 
             if !is_storage {
                 if let Some(ref name_node) = list.head.name {
@@ -218,8 +214,7 @@ impl VisitorMut for Minifier {
 
     fn visit_declaration(&mut self, decl: &mut Declaration) -> Visit {
         if let DeclarationData::InitDeclaratorList(list) = &mut decl.content {
-            let has_forbidden_qualifier = if let Some(qualifier) = &list.head.ty.content.qualifier {
-                qualifier.content.qualifiers.iter().any(|q| {
+            let has_forbidden_qualifier = list.head.ty.content.qualifier.as_ref().is_some_and(|qualifier| qualifier.content.qualifiers.iter().any(|q| {
                     if let TypeQualifierSpecData::Storage(storage_qual) = &q.content {
                         matches!(
                             storage_qual.content,
@@ -233,10 +228,7 @@ impl VisitorMut for Minifier {
                     } else {
                         false
                     }
-                })
-            } else {
-                false
-            };
+                }));
             if !has_forbidden_qualifier {
                 if let Some(identifier) = list.head.name.clone() {
                     let name = identifier.0.to_string();
@@ -271,7 +263,7 @@ impl VisitorMut for Minifier {
         // minify `vec4(1.0, 1.0, 1.0, 1.0)` to `vec(1.)`
         if let ExprData::FunCall(ident, args) = &mut expr.content {
             if let Some(name_node) = get_fun_name(ident) {
-                let name = name_node.to_string();
+                let name = name_node;
 
                 let expected_len = match name.as_str() {
                     "vec2" | "ivec2" | "uvec2" | "bvec2" => Some(2),
@@ -282,15 +274,11 @@ impl VisitorMut for Minifier {
 
                 if let Some(len) = expected_len {
                     if args.len() == len {
-                        let first_val = if let Some(first_arg) = args.first() {
-                            if let ExprData::FloatConst(f) = &first_arg.content {
+                        let first_val = args.first().and_then(|first_arg| if let ExprData::FloatConst(f) = &first_arg.content {
                                 Some(*f)
                             } else {
                                 None
-                            }
-                        } else {
-                            None
-                        };
+                            });
 
                         if let Some(val) = first_val {
                             let all_identical = args.iter().all(|arg| {

@@ -28,7 +28,7 @@ pub enum Preset {
 }
 
 impl Options {
-    pub fn fast() -> Self {
+    pub const fn fast() -> Self {
         Self {
             compression: Compression::Fast,
             shader_compression: ShaderCompression::None,
@@ -40,7 +40,7 @@ impl Options {
         }
     }
 
-    pub fn normal() -> Self {
+    pub const fn normal() -> Self {
         Self {
             compression: Compression::Normal,
             shader_compression: ShaderCompression::None,
@@ -52,7 +52,7 @@ impl Options {
         }
     }
 
-    pub fn best() -> Self {
+    pub const fn best() -> Self {
         Self {
             compression: Compression::Normal,
             shader_compression: ShaderCompression::None,
@@ -64,7 +64,7 @@ impl Options {
         }
     }
 
-    pub fn from_preset(preset: Preset) -> Self {
+    pub const fn from_preset(preset: Preset) -> Self {
         match preset {
             Preset::Fast => Self::fast(),
             Preset::Normal => Self::normal(),
@@ -81,10 +81,10 @@ pub enum Compression {
 }
 
 impl Compression {
-    pub fn from_u8(value: u8) -> Self {
+    pub const fn from_u8(value: u8) -> Self {
         match value {
-            0 => Compression::Fast,
-            _ => Compression::Normal,
+            0 => Self::Fast,
+            _ => Self::Normal,
         }
     }
 }

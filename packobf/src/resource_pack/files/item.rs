@@ -37,15 +37,15 @@ pub enum Model {
     },
     #[serde(rename = "composite", alias = "minecraft:composite")]
     Composite {
-        models: Vec<Model>,
+        models: Vec<Self>,
         #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "condition", alias = "minecraft:condition")]
     Condition {
         property: String,
-        on_true: Box<Model>,
-        on_false: Box<Model>,
+        on_true: Box<Self>,
+        on_false: Box<Self>,
         #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
@@ -56,7 +56,7 @@ pub enum Model {
         property: String,
         cases: Vec<SelectCase>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        fallback: Option<Box<Model>>,
+        fallback: Option<Box<Self>>,
         #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
@@ -69,7 +69,7 @@ pub enum Model {
         scale: f32,
         entries: Vec<RangeEntry>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        fallback: Option<Box<Model>>,
+        fallback: Option<Box<Self>>,
         #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
@@ -255,13 +255,13 @@ pub enum SpecialModelData {
 }
 
 // Helpers for default values
-fn default_true() -> bool {
+const fn default_true() -> bool {
     true
 }
-fn is_true(b: &bool) -> bool {
+const fn is_true(b: &bool) -> bool {
     *b
 }
-fn default_one() -> f32 {
+const fn default_one() -> f32 {
     1.0
 }
 fn is_one(f: &f32) -> bool {
@@ -312,7 +312,7 @@ impl Item {
         identifier: Identifier,
         json: &str,
     ) -> Result<Self, serde_json::Error> {
-        let mut item: Item = serde_json::from_str(json)?;
+        let mut item: Self = serde_json::from_str(json)?;
 
         item.overlay = overlay.into();
         item.identifier = identifier;
