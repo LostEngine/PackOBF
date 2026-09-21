@@ -20,9 +20,9 @@ pub enum FontProvider {
     #[serde(rename = "bitmap")]
     Bitmap {
         file: TextureIdWithExt,
-        #[serde(default = "default_ascent")]
+        #[serde(default = "default_ascent", deserialize_with = "crate::json::deserializers::deserialize_i32")]
         ascent: i32,
-        #[serde(default = "default_height")]
+        #[serde(default = "default_height", deserialize_with = "crate::json::deserializers::deserialize_i32")]
         height: i32,
         chars: Vec<String>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -80,7 +80,9 @@ pub struct FontFilter {
 pub struct HexSizeOverride {
     pub from: String,
     pub to: String,
+    #[serde(deserialize_with = "crate::json::deserializers::deserialize_i32")]
     pub left: i32,
+    #[serde(deserialize_with = "crate::json::deserializers::deserialize_i32")]
     pub right: i32,
 }
 

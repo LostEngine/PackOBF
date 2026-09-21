@@ -12,6 +12,7 @@ pub mod utils;
 pub mod overlay_remover;
 pub mod version;
 pub mod deflate;
+pub mod json;
 
 use crate::cache::Cache;
 use crate::optimized_zip_writer::OptimizedZipWriter;

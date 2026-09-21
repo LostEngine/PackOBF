@@ -1,6 +1,7 @@
 use crate::resource_pack::identifier::SoundId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use crate::json::{default_16_u32, default_one, default_one_u32, is_16_u32, is_one, is_one_u32};
 use crate::utils::clean_json_numbers;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -30,8 +31,10 @@ pub enum SoundInfo {
         name: SoundId,
         volume: f32,
         pitch: f32,
+        #[serde(deserialize_with = "crate::json::deserializers::deserialize_u32")]
         weight: u32,
         stream: bool,
+        #[serde(deserialize_with = "crate::json::deserializers::deserialize_u32")]
         attenuation_distance: u32,
         preload: bool,
     },
@@ -39,8 +42,10 @@ pub enum SoundInfo {
         name: String,
         volume: f32,
         pitch: f32,
+        #[serde(deserialize_with = "crate::json::deserializers::deserialize_u32")]
         weight: u32,
         stream: bool,
+        #[serde(deserialize_with = "crate::json::deserializers::deserialize_u32")]
         attenuation_distance: u32,
         preload: bool,
     },
@@ -51,30 +56,30 @@ pub enum SoundInfo {
 enum SoundInfoData {
     File {
         name: SoundId,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         volume: f32,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         pitch: f32,
-        #[serde(default = "default_one_u32", skip_serializing_if = "is_one_u32")]
+        #[serde(default = "crate::json::default_one_u32", deserialize_with = "crate::json::deserializers::deserialize_u32", skip_serializing_if = "crate::json::is_one_u32")]
         weight: u32,
         #[serde(default)]
         stream: bool,
-        #[serde(default = "default_16_u32", skip_serializing_if = "is_16_u32")]
+        #[serde(default = "crate::json::default_16_u32", deserialize_with = "crate::json::deserializers::deserialize_u32", skip_serializing_if = "crate::json::is_16_u32")]
         attenuation_distance: u32,
         #[serde(default)]
         preload: bool,
     },
     Event {
         name: String,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         volume: f32,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         pitch: f32,
-        #[serde(default = "default_one_u32", skip_serializing_if = "is_one_u32")]
+        #[serde(default = "crate::json::default_one_u32", deserialize_with = "crate::json::deserializers::deserialize_u32", skip_serializing_if = "crate::json::is_one_u32")]
         weight: u32,
         #[serde(default)]
         stream: bool,
-        #[serde(default = "default_16_u32", skip_serializing_if = "is_16_u32")]
+        #[serde(default = "crate::json::default_16_u32", deserialize_with = "crate::json::deserializers::deserialize_u32", skip_serializing_if = "crate::json::is_16_u32")]
         attenuation_distance: u32,
         #[serde(default)]
         preload: bool,
@@ -159,28 +164,4 @@ impl SoundDefinitions {
         };
         format!("{}assets/{}/sounds.json", prefix, self.namespace)
     }
-}
-
-const fn default_one() -> f32 {
-    1.0
-}
-
-const fn default_one_u32() -> u32 {
-    1
-}
-
-const fn default_16_u32() -> u32 {
-    16
-}
-
-fn is_one(f: &f32) -> bool {
-    (*f - 1.0).abs() < f32::EPSILON
-}
-
-fn is_one_u32(f: &u32) -> bool {
-    f == &1
-}
-
-fn is_16_u32(f: &u32) -> bool {
-    f == &16
 }

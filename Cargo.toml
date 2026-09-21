@@ -19,6 +19,5 @@ glsl-lang-types = { git = "https://github.com/LostEngine/patched-libraries", bra
 opt-level = "z"
 lto = true
 codegen-units = 1
-panic = "abort"
 strip = true
-debug = 1 # for dhat
+#debug = 1 # for dhat

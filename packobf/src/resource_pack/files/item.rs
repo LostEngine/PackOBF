@@ -12,13 +12,13 @@ pub struct Item {
     #[serde(skip)]
     pub identifier: Identifier,
 
-    #[serde(default = "default_true", skip_serializing_if = "is_true")]
+    #[serde(default = "crate::json::default_true", skip_serializing_if = "crate::json::is_true")]
     pub hand_animation_on_swap: bool,
-    #[serde(default, skip_serializing_if = "is_false_or_older_than_1_21_6")]
+    #[serde(default, skip_serializing_if = "crate::json::is_false_or_older_than_1_21_6")]
     pub oversized_in_gui: bool,
     #[serde(
-        default = "default_one",
-        skip_serializing_if = "is_one_or_older_than_1_21_11"
+        default = "crate::json::default_one",
+        skip_serializing_if = "crate::json::is_one_or_older_than_1_21_11"
     )]
     pub swap_animation_scale: f32,
     pub model: Model,
@@ -32,13 +32,13 @@ pub enum Model {
         model: ModelId,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         tints: Vec<TintSource>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "composite", alias = "minecraft:composite")]
     Composite {
         models: Vec<Self>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "condition", alias = "minecraft:condition")]
@@ -46,7 +46,7 @@ pub enum Model {
         property: String,
         on_true: Box<Self>,
         on_false: Box<Self>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -57,7 +57,7 @@ pub enum Model {
         cases: Vec<SelectCase>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Self>>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -65,12 +65,12 @@ pub enum Model {
     #[serde(rename = "range_dispatch", alias = "minecraft:range_dispatch")]
     RangeDispatch {
         property: String,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         scale: f32,
         entries: Vec<RangeEntry>,
         #[serde(skip_serializing_if = "Option::is_none")]
         fallback: Option<Box<Self>>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
         #[serde(flatten)]
         extra: serde_json::Value,
@@ -79,7 +79,7 @@ pub enum Model {
     Special {
         base: ModelId,
         model: SpecialModelData,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1", flatten)]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_26_1", flatten)]
         transformation: Option<Transformation>,
     },
     #[serde(rename = "empty", alias = "minecraft:empty")]
@@ -150,7 +150,7 @@ pub enum TintSource {
     Team { default: serde_json::Value },
     #[serde(rename = "custom_model_data", alias = "minecraft:custom_model_data")]
     CustomModelData {
-        #[serde(default)]
+        #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32")]
         index: i32,
         default: serde_json::Value,
     },
@@ -162,7 +162,7 @@ pub enum SpecialModelData {
     #[serde(rename = "banner", alias = "minecraft:banner")]
     Banner {
         #[serde(
-            default = "default_ground",
+            default = "crate::json::default_ground",
             skip_serializing_if = "version::is_older_than_26_1"
         )]
         attachment: String,
@@ -192,7 +192,7 @@ pub enum SpecialModelData {
     #[serde(rename = "chest", alias = "minecraft:chest")]
     Chest {
         texture: Identifier, // chest atlas
-        #[serde(default = "default_single", skip_serializing_if = "version::is_older_than_26_1")]
+        #[serde(default = "crate::json::default_single", skip_serializing_if = "version::is_older_than_26_1")]
         chest_type: String,
         #[serde(default)]
         openness: f32,
@@ -229,69 +229,29 @@ pub enum SpecialModelData {
         texture: String,
         #[serde(default)]
         openness: f32,
-        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
         orientation: Option<String>,
     },
     #[serde(rename = "standing_sign", alias = "minecraft:standing_sign")]
     StandingSign {
-        #[serde(default = "default_ground", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
+        #[serde(default = "crate::json::default_ground", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
         attachment: String,
-        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
         wood_type: Option<String>,
-        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
         texture: Option<Identifier>, // signs atlas
     },
     #[serde(rename = "hanging_sign", alias = "minecraft:hanging_sign")]
     HangingSign {
-        #[serde(default = "default_ceiling_middle", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
+        #[serde(default = "crate::json::default_ceiling_middle", skip_serializing_if = "version::is_not_between_26_1_and_26_2")]
         attachment: String,
-        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
         wood_type: Option<String>,
-        #[serde(skip_serializing_if = "is_none_or_newer_than_26_1")]
+        #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
         texture: Option<Identifier>, // signs atlas
     },
     #[serde(rename = "trident", alias = "minecraft:trident")]
     Trident {},
-}
-
-// Helpers for default values
-const fn default_true() -> bool {
-    true
-}
-const fn is_true(b: &bool) -> bool {
-    *b
-}
-const fn default_one() -> f32 {
-    1.0
-}
-fn is_one(f: &f32) -> bool {
-    (*f - 1.0).abs() < f32::EPSILON
-}
-fn default_ground() -> String {
-    "ground".to_string()
-}
-
-fn default_ceiling_middle() -> String {
-    "ceiling_middle".to_string()
-}
-fn default_single() -> String {
-    "single".to_string()
-}
-
-pub fn is_false_or_older_than_1_21_6(value: &bool) -> bool {
-    !*value || version::is_older_than_1_21_4(&())
-}
-
-pub fn is_one_or_older_than_1_21_11(f: &f32) -> bool {
-    (*f - 1.0).abs() < f32::EPSILON || version::is_older_than_1_21_11(&())
-}
-
-pub fn is_none_or_older_than_26_1<T>(value: &Option<T>) -> bool {
-    value.is_none() || version::is_older_than_26_1(&())
-}
-
-pub fn is_none_or_newer_than_26_1<T>(value: &Option<T>) -> bool {
-    value.is_none() || version::is_newer_than_26_1(&())
 }
 
 impl std::fmt::Display for Item {

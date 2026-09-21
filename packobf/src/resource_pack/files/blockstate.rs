@@ -1,8 +1,7 @@
 use crate::resource_pack::identifier::{Identifier, ModelId};
+use crate::utils::clean_json_numbers;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::utils::clean_json_numbers;
-use crate::version;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Blockstate {
@@ -30,17 +29,17 @@ pub enum VariantValue {
 pub struct BlockModel {
     pub model: ModelId,
 
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero")]
     pub x: i32,
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero")]
     pub y: i32,
-    #[serde(default, skip_serializing_if = "is_zero_or_older_than_1_21_11")]
+    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero_or_older_than_1_21_11")]
     pub z: i32,
 
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub uvlock: bool,
 
-    #[serde(default = "default_weight", skip_serializing_if = "is_default_weight")]
+    #[serde(default = "crate::json::default_weight", deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_default_weight")]
     pub weight: i32,
 }
 
@@ -75,19 +74,6 @@ impl std::fmt::Display for Blockstate {
         clean_json_numbers(&mut val);
         write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
     }
-}
-
-const fn is_zero(v: &i32) -> bool {
-    *v == 0
-}
-const fn default_weight() -> i32 {
-    1
-}
-const fn is_default_weight(v: &i32) -> bool {
-    *v == 1
-}
-fn is_zero_or_older_than_1_21_11(v: &i32) -> bool {
-    *v == 0 || version::is_older_than_1_21_11(&())
 }
 
 impl Blockstate {

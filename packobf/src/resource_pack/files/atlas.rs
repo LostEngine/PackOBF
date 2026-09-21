@@ -32,9 +32,9 @@ pub enum Source {
     #[serde(rename = "unstitch", alias = "minecraft:unstitch")]
     Unstitch {
         resource: Identifier,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         divisor_x: f32,
-        #[serde(default = "default_one", skip_serializing_if = "is_one")]
+        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
         divisor_y: f32,
         regions: Vec<UnstitchRegion>,
     },
@@ -46,7 +46,7 @@ pub enum Source {
         textures: Vec<Identifier>,
         palette_key: String,
         permutations: HashMap<String, Identifier>,
-        #[serde(default = "default_underscore", skip_serializing_if = "is_underscore")]
+        #[serde(default = "crate::json::default_underscore", skip_serializing_if = "crate::json::is_underscore")]
         separator: String,
     },
 }
@@ -66,21 +66,6 @@ pub struct FilterPattern {
     namespace: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     path: Option<String>,
-}
-
-const fn default_one() -> f32 {
-    1.0
-}
-fn is_one(f: &f32) -> bool {
-    (*f - 1.0).abs() < f32::EPSILON
-}
-
-fn default_underscore() -> String {
-    "_".to_string()
-}
-
-fn is_underscore(s: &String) -> bool {
-    s == "_"
 }
 
 impl std::fmt::Display for Atlas {
