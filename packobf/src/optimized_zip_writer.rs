@@ -78,6 +78,12 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
 
         let mut inner = self.inner.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
 
+        // Check the cache again after we get the lock
+        let re_check = self.content_cache.get(&hash).map(|r| r.clone());
+        if let Some(cached_data) = re_check {
+            return self.record_entry(&mut inner, filename, cached_data);
+        }
+
         // Record the precise start offset for the Local File Header
         let header_offset = inner.writer.stream_position()? as u32;
 
