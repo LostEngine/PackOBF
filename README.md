@@ -15,10 +15,10 @@ Usage: packobf_cli [OPTIONS] --input-file <FILE> --output-file <FILE>
 Options:
   -i, --input-file <FILE>                        
   -o, --output-file <FILE>                       
-  -p, --preset <PRESET>                          [possible values: fastest, fast, normal, best, ultra]
+  -p, --preset <PRESET>                          [possible values: fast, normal, best]
   -l, --log-level <LOG_LEVEL>                    [default: info] [possible values: info, warning, error, none]
       --cache-file <CACHE_FILE>                  
-  -c, --compression <COMPRESSION>                [default: normal] [possible values: fastest, fast, normal, best, ultra]
+  -c, --compression <COMPRESSION>                [default: normal] [possible values: fast, normal]
       --shader-compression <SHADER_COMPRESSION>  [default: minify] [possible values: none, minify, minify-and-obfuscate]
       --rename-files                             
       --block-unzipping                          
@@ -30,7 +30,7 @@ Options:
 ```
 
 > [!TIP]
-> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fastest`, `fast`, `normal`, `best`, `ultra`.
+> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fast`, `normal`, and `best`.
 
 ~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
 because of internet browser restrictions.~~ PackOBF on internet browsers is deprecated.
@@ -42,22 +42,22 @@ because of internet browser restrictions.~~ PackOBF on internet browsers is depr
 
 ### JSON Files
 PackOBF will parse JSON files into memory and will know for JSON files in `items`, `models`, `blockstates`, `fonts`, `sound_definitions`, and `atlas` folders
-which fields exist, which one are required, their value type (string, integer, etc.) and their default value.
+which fields exist, which ones are required, their type (string, integer, etc.) and their default value.
 With all of this data, PackOBF is able to remove fields that are unknown by Minecraft, values that are
-already the default one, spaces and new lines.
+already the default one, spaces and line breaks.
 > [!NOTE]
 > For any other JSON file, PackOBF will only simplify them, remove spaces, newlines, `.0` for numbers, etc.
 
 ### PNG Files
-PackOBF uses [oxipng](https://github.com/oxipng/oxipng) to minimize losslessly PNG files.  
+PackOBF uses [an oxipng fork](https://github.com/PackOBF/oxipng) to losslessly minimize PNG files.  
 Moreover, if you enable the *Corrupt PNG Files* option (`--corrupt-png-files`), your PNG images will be
 corrupted and unreadable for a lof of image software but Minecraft and will remove some bytes from your PNG images.
 
 ### Resource pack file
-PackOBF has its own way of writing ZIP files, which will not work with some popular ZIP file extractors,
+PackOBF has its own way of writing ZIP files, which will not work with some popular ZIP file extractors 
 but does work with Minecraft. This way of writing ZIP files is not conventional, but it allows saving file size
 when duplicated files are in the resource pack and does not write useless data like folders and other fields on the ZIP file.
-PackOBF by itself will break some file software however the `jar -xf output.zip` command from Java will still be able to unzip it.
+PackOBF by itself will break some file software, however, the `jar -xf output.zip` command from Java will still be able to unzip it.
 By enabling the *Block resource pack from unzipping* option (`--block-unzipping`), it will totally block Java and a lot of software
 (including JD-GUI, Minecraft mods) from unzipping your resource pack while Minecraft can still load it.
 
@@ -66,7 +66,7 @@ PackOBF is able to rename resource pack overlays, models, textures and sounds th
 (example: `assets/_/textures/i/a.png` instead of `assets/minecraft/textures/item/my_cool_item.png`) while keeping everything working.
 
 ### Core Shaders (Experimental)
-PackOBF is able to parse core shaders, minify them, rename variables and functions to short names, it can be enabled using the
+PackOBF is able to parse core shaders, minify them, rename variables and functions to short names. It can be enabled using the
 `--shader-compression [none, minify, minify-and-obfuscate]` option, `minify-and-obfuscate` will rename variables and functions
 which might break your shaders, while `minify` does not.
 

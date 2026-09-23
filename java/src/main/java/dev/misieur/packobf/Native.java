@@ -14,7 +14,7 @@ public class Native {
 
     static class Options {
 
-        public Options(int compression, int shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles, int numThreads, int targetVersion) {
+        Options(int compression, int shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles, int numThreads, int targetVersion) {
             this.compression = compression;
             this.shaderCompression = shaderCompression;
             this.renameFiles = renameFiles;
@@ -24,13 +24,13 @@ public class Native {
             this.targetVersion = targetVersion;
         }
 
-        public int compression;
-        public int shaderCompression;
-        public boolean renameFiles;
-        public boolean blockUnzipping;
-        public boolean corruptPngFiles;
-        public int numThreads;
-        public int targetVersion;
+        int compression;
+        int shaderCompression;
+        boolean renameFiles;
+        boolean blockUnzipping;
+        boolean corruptPngFiles;
+        int numThreads;
+        int targetVersion;
     }
 
     interface LogCallback {

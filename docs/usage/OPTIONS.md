@@ -16,13 +16,10 @@
 
 Used for any file in the resource pack and PNG images before being compressed in the resource pack.
 
-| Compression level | Description                                                                                                                                 |
-|-------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| Fastest           | Uses libdeflate level 6                                                                                                                     |
-| Fast              | Uses libdeflate level 12                                                                                                                    |
-| Normal            | Pre-processes data with libdeflate level 9 and based on the results chooses zopfli options that would give the best time/compression ratio. |
-| Best              | Same as Normal but with higher zopfli compression.                                                                                          |
-| Ultra             | Zopfli with 40 iteration_count, 40 iterations_without_improvement and 25 maximum_block_splits                                               |
+| Compression level | Description                                      |
+|-------------------|--------------------------------------------------|
+| Fast              | Uses libdeflate level 6 and fast oxipng options  |
+| Normal            | Uses libdeflate level 12 and slow oxipng options |
 
 > [!NOTE]
 > You may not want to use the Ultra compression level if it's not for testing/benchmarking

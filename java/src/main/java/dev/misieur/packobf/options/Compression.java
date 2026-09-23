@@ -1,11 +1,8 @@
 package dev.misieur.packobf.options;
 
 public enum Compression {
-    FASTEST(0),
-    FAST(1),
-    NORMAL(2),
-    BEST(3),
-    ULTRA(4);
+    FAST(0),
+    NORMAL(1);
 
     private final int value;
 

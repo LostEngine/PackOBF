@@ -140,11 +140,6 @@ pub fn process_zip(
     pool.install(|| {
         let optimize_shaders = options.shader_compression != ShaderCompression::None;
 
-        let total_to_optimize = pack.textures.len()
-            + pack.unknown_textures.len()
-            + pack.sounds.len()
-            + if optimize_shaders { pack.shaders.len() } else { 0 };
-
         let total_files = pack.textures.len()
             + pack.unknown_textures.len()
             + pack.sounds.len()
@@ -158,7 +153,6 @@ pub fn process_zip(
             + pack.sound_definitions.len()
             + pack.atlases.len();
 
-        let opt_counter = AtomicU32::new(0);
         let build_counter = AtomicU32::new(0);
 
         enum PackItem {
@@ -195,66 +189,87 @@ pub fn process_zip(
             .chain(pack.unknown_files.into_iter().map(|(n, u)| PackItem::GenericFile(n, u.bytes)));
 
         items.par_bridge().for_each(|item| {
-            let (raw_path, bytes): (String, Cow<'_, [u8]>) = match item {
-                PackItem::AssetTexture(name, t) => {
+            macro_rules! send_progress {
+                ($name:expr) => {
                     let _ = progress.send(Progress::Optimizing {
-                        current: name.clone(),
-                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize as u32,
+                        current: $name.to_string(),
+                        index: build_counter.fetch_add(1, Ordering::Relaxed) + 1,
+                        total: total_files as u32,
                     });
+                };
+            }
+            let (name, bytes): (String, Cow<'_, [u8]>) = match item {
+                PackItem::AssetTexture(name, t) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
                     (name, Cow::Owned(t.optimize(options, logger, &cache)))
                 }
                 PackItem::UnknownTexture(name, ut) => {
-                    let _ = progress.send(Progress::Optimizing {
-                        current: name.clone(),
-                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize as u32,
-                    });
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
                     (name, Cow::Owned(ut.optimize(options, logger, &cache)))
                 }
                 PackItem::Sound(name, s) => {
-                    let _ = progress.send(Progress::Optimizing {
-                        current: name.clone(),
-                        index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                        total: total_to_optimize as u32,
-                    });
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
                     (name, Cow::Owned(s.optimize(logger, &cache)))
                 }
                 PackItem::Shader(name, s) => {
-                    if optimize_shaders {
-                        let _ = progress.send(Progress::Optimizing {
-                            current: name.clone(),
-                            index: opt_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                            total: total_to_optimize as u32,
-                        });
-                    }
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
                     (name, Cow::Owned(s.optimize(options, logger).into_bytes()))
                 }
-                PackItem::Model(name, m) => (name, Cow::Owned(m.to_string().into_bytes())),
-                PackItem::Json(name, j) => (name, Cow::Owned(j.content.to_string().into_bytes())),
-                PackItem::Blockstate(name, b) => (name, Cow::Owned(b.to_string().into_bytes())),
-                PackItem::Font(name, f) => (name, Cow::Owned(f.to_string().into_bytes())),
-                PackItem::Item(name, i) => (name, Cow::Owned(i.to_string().into_bytes())),
-                PackItem::SoundDefinitions(name, sd) => (name, Cow::Owned(sd.to_string().into_bytes())),
-                PackItem::Atlas(name, a) => (name, Cow::Owned(a.to_string().into_bytes())),
-                PackItem::GenericFile(name, u) => (name, Cow::Owned(u)),
+                PackItem::Model(name, m) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(m.to_string().into_bytes()))
+                },
+                PackItem::Json(name, j) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(j.content.to_string().into_bytes()))
+                },
+                PackItem::Blockstate(name, b) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(b.to_string().into_bytes()))
+                },
+                PackItem::Font(name, f) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(f.to_string().into_bytes()))
+                },
+                PackItem::Item(name, i) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(i.to_string().into_bytes()))
+                },
+                PackItem::SoundDefinitions(name, sd) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(sd.to_string().into_bytes()))
+                },
+                PackItem::Atlas(name, a) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(a.to_string().into_bytes()))
+                },
+                PackItem::GenericFile(name, u) => {
+                    let name = resolve_asset_path(name);
+                    send_progress!(name);
+                    (name, Cow::Owned(u))
+                },
             };
 
-            let target_path = resolve_asset_path(&raw_path);
-
-            let _ = progress.send(Progress::Building {
-                current: target_path.as_ref().to_string(),
-                index: build_counter.fetch_add(1, Ordering::Relaxed) + 1,
-                total: total_files as u32,
-            });
-
-            if let Err(e) = writer.add_file(&target_path, &bytes, options, &cache) {
+            if let Err(e) = writer.add_file(&name, &bytes, options, &cache) {
                 let _ = logger.send(LogMessage {
                     level: LogLevel::Error,
-                    message: format!("Failed to add item {target_path} to archive: {e}"),
+                    message: format!("Failed to add item {name} to archive: {e}"),
                 });
             }
         });
+
+        let _ = progress.send(Progress::Finishing);
 
         if let Some(ref mcmeta) = pack.pack_mcmeta {
             let _ = writer.add_file(mcmeta.path(), mcmeta.to_string().as_bytes(), options, &cache);
@@ -273,15 +288,15 @@ pub fn process_zip(
     Ok(output.into_inner())
 }
 
-fn resolve_asset_path(path: &str) -> Cow<'_, str> {
+fn resolve_asset_path(path: String) -> String {
     if !path.starts_with("assets/") {
         if let Some((overlay, rest)) = path.split_once('/') {
             if let Some(value) = mapping::get_mappings().overlay_mappings.get(overlay) {
-                return Cow::Owned(format!("{value}/{rest}"));
+                return format!("{value}/{rest}");
             }
         }
     }
-    Cow::Borrowed(path)
+    path
 }
 
 fn read_zip_entries(
@@ -330,11 +345,7 @@ pub enum Progress {
         index: u32,
         total: u32,
     },
-    Building {
-        current: String,
-        index: u32,
-        total: u32,
-    },
+    Finishing,
     Done,
 }
 

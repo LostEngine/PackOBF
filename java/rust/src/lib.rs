@@ -128,11 +128,7 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                                 index: i,
                                 total: t,
                             } => (3, i as i32, t as i32, Some(s)),
-                            Progress::Building {
-                                current: s,
-                                index: i,
-                                total: t,
-                            } => (4, i as i32, t as i32, Some(s)),
+                            Progress::Finishing => (4, 0, 0, None),
                             Progress::Done => (5, 0, 0, None),
                         };
 

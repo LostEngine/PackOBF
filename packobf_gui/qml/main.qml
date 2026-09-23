@@ -72,6 +72,7 @@ ApplicationWindow {
         title: "Create Cache File"
         fileMode: FileDialog.SaveFile
         nameFilters: ["Bin files (*.bin)"]
+        currentFile: Qt.resolvedUrl("cache.bin")
         onAccepted: appController.cache_file_path = urlToPath(selectedFile)
     }
 
@@ -81,6 +82,7 @@ ApplicationWindow {
         fileMode: FileDialog.SaveFile
         defaultSuffix: "zip"
         nameFilters: ["Zip files (*.zip)"]
+        currentFile: Qt.resolvedUrl("pack.zip")
         onAccepted: appController.save_output(urlToPath(selectedFile))
     }
 
@@ -89,9 +91,16 @@ ApplicationWindow {
         title: "Optimization Complete"
         anchors.centerIn: parent
         modal: true
-        standardButtons: Dialog.Ok
         visible: appController.show_stats_popup
         onClosed: appController.show_stats_popup = false
+
+        footer: DialogButtonBox {
+            Button {
+                text: "Save file"
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+            }
+            onAccepted: saveOutputDialog.open()
+        }
 
         ColumnLayout {
             Label {
@@ -177,7 +186,7 @@ ApplicationWindow {
                 }
             }
             ComboBox {
-                model: ["Fastest", "Fast", "Normal", "Best", "Ultra"]
+                model: ["Fast", "Normal"]
                 currentIndex: appController.compression
                 onCurrentIndexChanged: appController.compression = currentIndex
                 Layout.preferredWidth: 200

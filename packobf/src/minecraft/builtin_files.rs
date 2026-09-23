@@ -3,6 +3,9 @@ use strum_macros::{Display, EnumString};
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 pub fn is_in_models(input: &str) -> bool {
+    if input.starts_with("builtin/") {
+        return true;
+    }
     MODELS.contains(input)
 }
 

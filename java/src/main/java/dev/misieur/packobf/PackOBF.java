@@ -71,7 +71,7 @@ public class PackOBF {
                         case 1 -> progressCallback.onProgress(new ReadingZipProgress(current, total));
                         case 2 -> progressCallback.onProgress(new ParsingProgress(currentString));
                         case 3 ->
-                                progressCallback.onProgress(new BuildingProgress(total, new BuildingProgress.Current(currentString, current)));
+                                progressCallback.onProgress(new FinishingProgress());
                         case 4 -> progressCallback.onProgress(new DoneProgress());
                         default -> {
                         }
