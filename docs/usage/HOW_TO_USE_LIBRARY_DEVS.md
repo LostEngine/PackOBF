@@ -13,7 +13,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly("me.misieur:packobf:0.3.0-beta.2")
+    compileOnly("me.misieur:packobf:0.3.0-beta.3")
 }
 ```
 

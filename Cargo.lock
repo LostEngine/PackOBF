@@ -1863,7 +1863,7 @@ dependencies = [
 
 [[package]]
 name = "packobf"
-version = "0.3.0-beta.2"
+version = "0.3.0-beta.3"
 dependencies = [
  "arc-swap",
  "byteorder",
@@ -1892,7 +1892,7 @@ dependencies = [
 
 [[package]]
 name = "packobf_cli"
-version = "0.3.0-beta.2"
+version = "0.3.0-beta.3"
 dependencies = [
  "clap",
  "console",
@@ -1903,7 +1903,7 @@ dependencies = [
 
 [[package]]
 name = "packobf_gui"
-version = "0.3.0-beta.2"
+version = "0.3.0-beta.3"
 dependencies = [
  "arboard",
  "cxx",
