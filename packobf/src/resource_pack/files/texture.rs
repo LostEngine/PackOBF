@@ -59,6 +59,29 @@ impl Texture {
                 libdeflater_zlib(input, 12, !disable_checksums).map_err(|_| PngError::InvalidData)
             }),
         };
+        oxipng_options.filters = match options.compression {
+            Compression::Fast => indexset! {
+                FilterStrategy::NONE,
+                FilterStrategy::SUB,
+                FilterStrategy::Entropy,
+                FilterStrategy::Bigrams
+            },
+            Compression::Normal => indexset! {
+                FilterStrategy::NONE,
+                FilterStrategy::SUB,
+                FilterStrategy::UP,
+                FilterStrategy::AVERAGE,
+                FilterStrategy::PAETH,
+                FilterStrategy::MinSum,
+                FilterStrategy::Entropy,
+                FilterStrategy::Bigrams,
+                FilterStrategy::BigEnt,
+                FilterStrategy::Brute {
+                    num_lines: 8,
+                    level: 5,
+                },
+            }
+        };
 
         match optimize_from_memory(&self.bytes, &oxipng_options) {
             Ok(value) => {
@@ -130,17 +153,8 @@ static OPTIONS: Lazy<oxipng::Options> = Lazy::new(|| oxipng::Options {
     filters: indexset! {
         FilterStrategy::NONE,
         FilterStrategy::SUB,
-        FilterStrategy::UP,
-        FilterStrategy::AVERAGE,
-        FilterStrategy::PAETH,
-        FilterStrategy::MinSum,
         FilterStrategy::Entropy,
-        FilterStrategy::Bigrams,
-        FilterStrategy::BigEnt,
-        FilterStrategy::Brute {
-            num_lines: 8,
-            level: 12,
-        },
+        FilterStrategy::Bigrams
     },
     interlace: Some(false),
     optimize_alpha: true,
