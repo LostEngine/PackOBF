@@ -30,7 +30,7 @@ fn rename_overlays(pack: &mut FrozenResourcePack, mapping: &mut HashMap<String, 
         if let Some(overlay) = mcmeta.overlays.as_mut() {
             if let Some(entries) = overlay.entries.as_mut() {
                 for (count, entry) in entries.iter_mut().enumerate() {
-                    let new_name = generate_short_name(count);
+                    let new_name = generate_short_name(count, false);
                     mapping.insert(entry.directory.clone(), new_name.clone());
                     entry.directory = new_name;
                 }
@@ -75,7 +75,7 @@ fn rename_sounds(
             let new_path = sound.path();
             updated_sounds.push((new_path, sound));
         } else {
-            let new_identifier = Identifier::new("_", generate_short_name(count));
+            let new_identifier = Identifier::new("_", generate_short_name(count, true));
             mapping.insert(identifier, new_identifier.to_string());
             sound.identifier = new_identifier;
             let new_path = sound.path();
@@ -189,7 +189,7 @@ fn rename_textures(
                 continue;
             };
             let count = per_folder_count.entry(prefix.to_string()).or_insert(0);
-            let path = prefix.to_owned() + generate_short_name(*count).as_str();
+            let path = prefix.to_owned() + generate_short_name(*count, true).as_str();
             let new_identifier = Identifier::new("_", path);
             mapping.insert(identifier, new_identifier.to_string());
             texture.identifier = new_identifier;
@@ -319,7 +319,7 @@ fn rename_models(
             let new_path = model.path();
             updated_models.push((new_path, model));
         } else {
-            let new_identifier = Identifier::new("_", generate_short_name(count));
+            let new_identifier = Identifier::new("_", generate_short_name(count, true));
             mapping.insert(identifier, new_identifier.to_string());
             model.identifier = new_identifier;
             let new_path = model.path();
@@ -331,8 +331,8 @@ fn rename_models(
     pack.models = updated_models;
 }
 
-fn generate_short_name(mut id: usize) -> String {
-    let charset = "abcdefghijklmnopqrstuvwxyz0123456789_-";
+fn generate_short_name(mut id: usize, dots: bool) -> String {
+    let charset = format!("abcdefghijklmnopqrstuvwxyz0123456789_-{}", if dots { "." } else { "" });
     let base = charset.len();
     let bytes = charset.as_bytes();
 

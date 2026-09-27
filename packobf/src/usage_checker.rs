@@ -29,14 +29,14 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             |t| t.identifier.to_string(),
             builtin_files::is_in_textures,
         ));
-        s.spawn(|_| check_category(
+        check_category(
             logger,
             "Sound",
             &pack.sounds,
             &counter.sound_counter,
             |s| s.identifier.to_string(),
             builtin_files::is_in_sounds,
-        ));
+        );
     });
 }
 

@@ -92,7 +92,7 @@ pub struct Element {
     pub shade: Option<bool>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub light_emission: Option<bool>,
+    pub light_emission: Option<u8>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub faces: Option<HashMap<String, Face>>,
