@@ -1,6 +1,9 @@
 target
 .idea
 
+# Use this directory to put your resource packs
+.pack
+
 # keep your zip files!
 **/*.zip
 # PGP private keys
