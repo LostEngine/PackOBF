@@ -71,7 +71,7 @@ fn rename_sounds(
     for (count, (_key, mut sound)) in sounds.into_iter().enumerate() {
         let identifier = sound.identifier.to_string();
         if let Some(mapped) = mapping.get(&identifier) {
-            sound.identifier.path = mapped.clone();
+            sound.identifier = Identifier::parse(mapped);
             let new_path = sound.path();
             updated_sounds.push((new_path, sound));
         } else {
@@ -123,7 +123,7 @@ fn rename_textures(
         let identifier = texture.identifier.to_string();
 
         if let Some(mapped) = mapping.get(&identifier) {
-            texture.identifier.path = mapped.clone();
+            texture.identifier = Identifier::parse(mapped);
             let new_path = texture.path();
 
             let old_mcmeta_key = format!("{key}.mcmeta");
@@ -326,7 +326,7 @@ fn rename_models(
     for (count, (_key, mut model)) in models.into_iter().enumerate() {
         let identifier = model.identifier.to_string();
         if let Some(mapped) = mapping.get(&identifier) {
-            model.identifier.path = mapped.clone();
+            model.identifier = Identifier::parse(mapped);
             let new_path = model.path();
             updated_models.push((new_path, model));
         } else {
