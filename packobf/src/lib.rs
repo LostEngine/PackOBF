@@ -353,8 +353,8 @@ fn get_type(path: &str) -> Option<&str> {
     let mut parts = path.split('/');
     if path.starts_with("assets/") {
         parts.nth(2)
-    } else if parts.nth(2) == Some("assets") {
-        parts.next()
+    } else if parts.nth(1) == Some("assets") {
+        parts.nth(1)
     } else {
         None
     }
