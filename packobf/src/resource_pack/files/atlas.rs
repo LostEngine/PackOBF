@@ -132,7 +132,7 @@ impl Atlas {
         if result.is_some() {
             for source in self.sources.iter() {
                 if let Source::Filter { pattern, .. } = source {
-                    let ns_match = pattern.namespace.as_ref().is_none_or( |ns_regex| Regex::new(ns_regex)
+                    let ns_match = pattern.namespace.as_ref().is_none_or(|ns_regex| Regex::new(ns_regex)
                             .is_ok_and(|re| re.is_match(&texture_id.namespace)));
 
                     let path_match = pattern.path.as_ref().is_none_or(|path_regex| Regex::new(path_regex)
@@ -146,5 +146,59 @@ impl Atlas {
         }
 
         result
+    }
+
+    pub fn get_sprites(&self, texture_id: &Identifier) -> Vec<Identifier> {
+        let mut sprites = Vec::new();
+        for source in &self.sources {
+            match source {
+                Source::Single { resource, sprite }
+                    if resource == texture_id =>
+                {
+                    sprites.push(sprite.clone().unwrap_or_else(|| resource.clone()));
+                }
+                Source::Directory { source, prefix } => {
+                    if let Some(path) = texture_id.path.strip_prefix(source) {
+                        sprites.push(Identifier::new(
+                            texture_id.namespace.clone(),
+                            format!("{prefix}{path}"),
+                        ));
+                    }
+                }
+                Source::Unstitch { resource, regions, .. } if resource == texture_id => {
+                    sprites.extend(regions.iter().map(|region| region.sprite.clone()));
+                }
+                Source::PalettedPermutations {
+                    textures,
+                    permutations,
+                    separator,
+                    ..
+                } if textures.contains(texture_id) => {
+                    sprites.extend(permutations.keys().map(|permutation| {
+                        Identifier::new(
+                            texture_id.namespace.clone(),
+                            format!("{}{separator}{permutation}", texture_id.path),
+                        )
+                    }));
+                }
+                _ => {}
+            }
+        }
+
+        sprites.retain(|sprite| {
+            !self.sources.iter().any(|source| match source {
+                Source::Filter { pattern } => {
+                    let ns_match = pattern.namespace.as_ref().is_none_or(|regex| {
+                        Regex::new(regex).is_ok_and(|re| re.is_match(&sprite.namespace))
+                    });
+                    let path_match = pattern.path.as_ref().is_none_or(|regex| {
+                        Regex::new(regex).is_ok_and(|re| re.is_match(&sprite.path))
+                    });
+                    ns_match && path_match
+                }
+                _ => false,
+            })
+        });
+        sprites
     }
 }

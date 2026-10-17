@@ -105,8 +105,8 @@ fn rename_textures(
         let a_id = a.identifier.to_string();
         let b_id = b.identifier.to_string();
 
-        let a_usage = id_counter.get_usage_count(&a_id, mapping::IdCategory::Texture);
-        let b_usage = id_counter.get_usage_count(&b_id, mapping::IdCategory::Texture);
+        let a_usage = texture_usage(pack, &a.identifier, &a_id, id_counter);
+        let b_usage = texture_usage(pack, &b.identifier, &b_id, id_counter);
 
         // Higher usage first
         b_usage
@@ -140,24 +140,16 @@ fn rename_textures(
             let mut aliases = Vec::new();
 
             for (_, atlas) in &pack.atlases {
-                if atlas.overlay != texture.overlay {
+                let sprites = atlas.get_sprites(&texture.identifier);
+                if sprites.is_empty() {
                     continue;
                 }
                 match atlas.atlas_type {
-                    AtlasType::Blocks => {
-                        if let Some(id) = atlas.get_identifier(&texture.identifier) {
-                            in_blocks = true;
-                            aliases.push(id);
-                        }
-                    }
-                    AtlasType::Items => {
-                        if let Some(id) = atlas.get_identifier(&texture.identifier) {
-                            in_items = true;
-                            aliases.push(id);
-                        }
-                    }
+                    AtlasType::Blocks => in_blocks = true,
+                    AtlasType::Items => in_items = true,
                     _ => {}
                 }
+                aliases.extend(sprites);
             }
             match builtin_files::get_atlas(texture.identifier.path.as_str()) {
                 Some(AtlasType::Blocks) => {
@@ -192,6 +184,9 @@ fn rename_textures(
             let path = prefix.to_owned() + generate_short_name(*count, true).as_str();
             let new_identifier = Identifier::new("_", path);
             mapping.insert(identifier, new_identifier.to_string());
+            for alias in aliases {
+                mapping.insert(alias.to_string(), new_identifier.to_string());
+            }
             texture.identifier = new_identifier;
             let new_path = texture.path();
 
@@ -232,16 +227,31 @@ fn get_font_textures(pack: &FrozenResourcePack) -> Vec<String> {
     font_textures
 }
 
+fn texture_usage(
+    pack: &FrozenResourcePack,
+    identifier: &Identifier,
+    id: &str,
+    counter: &mapping::IdUsageCounter,
+) -> usize {
+    let direct = counter.get_usage_count(id, mapping::IdCategory::Texture);
+    pack.atlases
+        .iter()
+        .flat_map(|(_, atlas)| atlas.get_sprites(identifier))
+        .map(|sprite| counter.get_usage_count(&sprite.to_string(), mapping::IdCategory::Texture))
+        .fold(direct, usize::saturating_add)
+}
+
 fn rebuild_atlas(pack: &mut FrozenResourcePack) {
+    pack.atlases.retain(|(_, atlas)| atlas.overlay.is_empty());
     let mut item_atlas_exists = false;
     let mut block_atlas_exists = false;
     for (_, atlas) in pack.atlases.iter_mut() {
-        atlas.sources.retain(|source| !matches!(source, Source::Directory { .. } | Source::Single { .. }));
         match atlas.atlas_type {
             AtlasType::Blocks => {
                 if atlas.overlay.is_empty() {
                     block_atlas_exists = true;
                 }
+                atlas.sources.clear();
                 atlas.sources.push(Source::Directory {
                     source: "b".to_string(),
                     prefix: "b/".to_string(),
@@ -251,6 +261,7 @@ fn rebuild_atlas(pack: &mut FrozenResourcePack) {
                 if atlas.overlay.is_empty() {
                     item_atlas_exists = true;
                 }
+                atlas.sources.clear();
                 atlas.sources.push(Source::Directory {
                     source: "i".to_string(),
                     prefix: "i/".to_string(),

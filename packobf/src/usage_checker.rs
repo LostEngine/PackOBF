@@ -20,6 +20,8 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             &counter.model_counter,
             |m| m.identifier.to_string(),
             builtin_files::is_in_models,
+            |m, referenced| referenced.contains(&m.identifier.to_string()),
+            |id, ids| ids.contains(id),
         ));
         s.spawn(|_| check_category(
             logger,
@@ -28,6 +30,20 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             &counter.texture_counter,
             |t| t.identifier.to_string(),
             builtin_files::is_in_textures,
+            |t, referenced| {
+                referenced.contains(&t.identifier.to_string())
+                    || pack.atlases.iter().any(|(_, atlas)| {
+                        atlas.get_sprites(&t.identifier).iter().any(|sprite| {
+                            referenced.contains(&sprite.to_string())
+                        })
+                    })
+            },
+            |id, ids| {
+                ids.contains(id)
+                    || pack.textures.iter().any(|(_, texture)| {
+                        atlas_has_sprite(pack, &texture.identifier, id)
+                    })
+            },
         ));
         check_category(
             logger,
@@ -36,6 +52,8 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             &counter.sound_counter,
             |s| s.identifier.to_string(),
             builtin_files::is_in_sounds,
+            |s, referenced| referenced.contains(&s.identifier.to_string()),
+            |id, ids| ids.contains(id),
         );
     });
 }
@@ -47,6 +65,8 @@ fn check_category<T>(
     counter_map: &DashMap<String, AtomicUsize>,
     get_id: impl Fn(&T) -> String + Sync + Send,
     is_built_in: impl Fn(&str) -> bool + Sync + Send,
+    is_referenced: impl Fn(&T, &HashSet<String>) -> bool + Sync + Send,
+    is_present: impl Fn(&str, &HashSet<String>) -> bool + Sync + Send,
 ) where
     T: Sync + Send + 'static,
 {
@@ -59,7 +79,7 @@ fn check_category<T>(
 
     for (path, item) in vec {
         let id = get_id(item);
-        if !ids_referenced.contains(&id) {
+        if !is_referenced(item, &ids_referenced) {
             let _ = logger.send(LogMessage {
                 level: Warning,
                 message: format!("Unused {}: {} (File: {})", label, id, path),
@@ -69,7 +89,7 @@ fn check_category<T>(
 
     for entry in counter_map {
         let id = entry.key();
-        if !is_built_in(id) && !ids_in_pack.contains(id) {
+        if !is_built_in(id) && !is_present(id, &ids_in_pack) {
             let _ = logger.send(LogMessage {
                 level: Warning,
                 message: format!(
@@ -79,4 +99,10 @@ fn check_category<T>(
             });
         }
     }
+}
+
+fn atlas_has_sprite(pack: &FrozenResourcePack, texture_id: &crate::resource_pack::identifier::Identifier, id: &str) -> bool {
+    pack.atlases.iter().any(|(_, atlas)| {
+        atlas.get_sprites(texture_id).iter().any(|sprite| sprite.to_string() == id)
+    })
 }
