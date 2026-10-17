@@ -143,5 +143,5 @@ pub struct Face {
 pub struct Override {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub predicate: Option<serde_json::Value>,
-    pub model: String,
+    pub model: ModelId,
 }
