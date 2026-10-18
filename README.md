@@ -49,7 +49,7 @@ already the default one, spaces and line breaks.
 > For any other JSON file, PackOBF will only simplify them, remove spaces, newlines, `.0` for numbers, etc.
 
 ### PNG Files
-PackOBF uses [an oxipng fork](https://github.com/PackOBF/oxipng) to losslessly minimize PNG files.  
+PackOBF uses [an oxipng fork](https://github.com/LostEngine/oxipng) to losslessly minimize PNG files.  
 Moreover, if you enable the *Corrupt PNG Files* option (`--corrupt-png-files`), your PNG images will be
 corrupted and unreadable for a lof of image software but Minecraft and will remove some bytes from your PNG images.
 
