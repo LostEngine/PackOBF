@@ -220,8 +220,7 @@ impl Atlas {
                     })
                 })
             }
-            Source::Directory { .. } => false,
-            Source::Filter { .. } => false,
+            Source::Directory { .. } | Source::Filter { .. } => false,
         }) && !self.sources.iter().any(|source| match source {
             Source::Filter { pattern } => {
                 let ns_match = pattern.namespace.as_ref().is_none_or(|regex| {

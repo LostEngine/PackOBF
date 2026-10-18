@@ -249,7 +249,7 @@ impl qobject::AppController {
                         Progress::ReadingZip { current, total } => format!("Reading ZIP ({}/{})", current, total),
                         Progress::Parsing { current } => format!("Parsing {}", current),
                         Progress::Optimizing { current, index, total } => format!("Optimizing ({}/{}) {}", index, total, current),
-                        Progress::Finishing {} => "Finishing...".to_string(),
+                        Progress::Finishing => "Finishing...".to_string(),
                         Progress::Done => "Done".to_string(),
                     };
                     let qt_text = QString::from(&text);
