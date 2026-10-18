@@ -1,5 +1,4 @@
 target
-.idea
 
 # Use this directory to put your resource packs
 .pack
@@ -10,3 +9,9 @@ target
 **/*.gpg
 
 packobf_gui/.qmlls.ini
+
+# No IDE/Agent/LLM related files on the repository
+.idea/
+AGENTS.md
+.claude/
+.codex/
