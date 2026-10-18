@@ -251,7 +251,7 @@ fn rebuild_atlas(pack: &mut FrozenResourcePack) {
                 if atlas.overlay.is_empty() {
                     block_atlas_exists = true;
                 }
-                atlas.sources.clear();
+                atlas.sources.retain(|source| !matches!(source, Source::Directory { .. }));
                 atlas.sources.push(Source::Directory {
                     source: "b".to_string(),
                     prefix: "b/".to_string(),
@@ -261,7 +261,7 @@ fn rebuild_atlas(pack: &mut FrozenResourcePack) {
                 if atlas.overlay.is_empty() {
                     item_atlas_exists = true;
                 }
-                atlas.sources.clear();
+                atlas.sources.retain(|source| !matches!(source, Source::Directory { .. }));
                 atlas.sources.push(Source::Directory {
                     source: "i".to_string(),
                     prefix: "i/".to_string(),

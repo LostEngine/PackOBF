@@ -201,4 +201,38 @@ impl Atlas {
         });
         sprites
     }
+
+    pub fn has_declared_sprite(&self, sprite_id: &Identifier) -> bool {
+        self.sources.iter().any(|source| match source {
+            Source::Single { resource, sprite } => {
+                sprite.as_ref().unwrap_or(resource) == sprite_id
+            }
+            Source::Unstitch { regions, .. } => {
+                regions.iter().any(|region| &region.sprite == sprite_id)
+            }
+            Source::PalettedPermutations { textures, permutations, separator, .. } => {
+                textures.iter().any(|texture| {
+                    permutations.keys().any(|permutation| {
+                        Identifier::new(
+                            texture.namespace.clone(),
+                            format!("{}{separator}{permutation}", texture.path),
+                        ) == *sprite_id
+                    })
+                })
+            }
+            Source::Directory { .. } => false,
+            Source::Filter { .. } => false,
+        }) && !self.sources.iter().any(|source| match source {
+            Source::Filter { pattern } => {
+                let ns_match = pattern.namespace.as_ref().is_none_or(|regex| {
+                    Regex::new(regex).is_ok_and(|re| re.is_match(&sprite_id.namespace))
+                });
+                let path_match = pattern.path.as_ref().is_none_or(|regex| {
+                    Regex::new(regex).is_ok_and(|re| re.is_match(&sprite_id.path))
+                });
+                ns_match && path_match
+            }
+            _ => false,
+        })
+    }
 }

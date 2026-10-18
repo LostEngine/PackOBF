@@ -7,6 +7,7 @@ use dashmap::DashMap;
 use std::collections::HashSet;
 use std::sync::atomic::AtomicUsize;
 use tokio::sync::mpsc::UnboundedSender;
+use crate::resource_pack::identifier::Identifier;
 
 pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePack) {
     profile_scope!(std::any::type_name_of_val(&check_usage));
@@ -29,7 +30,9 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             &pack.textures,
             &counter.texture_counter,
             |t| t.identifier.to_string(),
-            builtin_files::is_in_textures,
+            |id| {
+                id.starts_with("#") || builtin_files::is_in_textures(id)
+            },
             |t, referenced| {
                 referenced.contains(&t.identifier.to_string())
                     || pack.atlases.iter().any(|(_, atlas)| {
@@ -40,8 +43,8 @@ pub fn check_usage(logger: &UnboundedSender<LogMessage>, pack: &FrozenResourcePa
             },
             |id, ids| {
                 ids.contains(id)
-                    || pack.textures.iter().any(|(_, texture)| {
-                        atlas_has_sprite(pack, &texture.identifier, id)
+                    || pack.atlases.iter().any(|(_, atlas)| {
+                        atlas.has_declared_sprite(&Identifier::parse(id))
                     })
             },
         ));
@@ -99,10 +102,4 @@ fn check_category<T>(
             });
         }
     }
-}
-
-fn atlas_has_sprite(pack: &FrozenResourcePack, texture_id: &crate::resource_pack::identifier::Identifier, id: &str) -> bool {
-    pack.atlases.iter().any(|(_, atlas)| {
-        atlas.get_sprites(texture_id).iter().any(|sprite| sprite.to_string() == id)
-    })
 }
