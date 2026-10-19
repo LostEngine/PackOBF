@@ -1,14 +1,16 @@
 # PackOBF,
+
 ### an open-source Minecraft: Java Edition resource pack minimizer written in Rust.
 
 PackOBF is a resource pack minimizer and checker for Minecraft: Java Edition.
-PackOBF is able to reduce the size of a resource pack and detect issues with files
-like PNG images and JSON files (items, models, blockstates, fonts, sound definitions, atlas).
-By parsing these files like Minecraft would do, it can detect issues like empty required fields,
+PackOBF is able to reduce the size of a resource pack and detect issues with PNG/OGG/JSON files.
+By parsing these files like Minecraft would do, it can detect issues like missing required fields,
 wrong value types in JSON files and malformed PNG/OGG files.
 
 ## Usage
+
 PackOBF comes with a command-line interface, here is how to use it:
+
 ```
 Usage: packobf_cli [OPTIONS] --input-file <FILE> --output-file <FILE>
 
@@ -30,9 +32,11 @@ Options:
 ```
 
 > [!TIP]
-> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fast`, `normal`, and `best`.
+> Using `--preset` is a good choice when trying PackOBF for the first time, possible values are: `fast`, `normal`, and
+`best`.
 
-~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than the native app 
+~~Alternatively, you can use PackOBF in your browser at https://packobf.misieur.me/ however, it will be way slower than
+the native app
 because of internet browser restrictions.~~ PackOBF on internet browsers is deprecated.
 
 > [!NOTE]
@@ -41,40 +45,50 @@ because of internet browser restrictions.~~ PackOBF on internet browsers is depr
 ## List of features
 
 ### JSON Files
-PackOBF will parse JSON files into memory and will know for JSON files in `items`, `models`, `blockstates`, `fonts`, `sound_definitions`, and `atlas` folders
+
+PackOBF parses JSON files in memory and knows for JSON files in `items`, `models`, `blockstates`, `fonts`,
+`sound_definitions`, and `atlas` folders
 which fields exist, which ones are required, their type (string, integer, etc.) and their default value.
-With all of this data, PackOBF is able to remove fields that are unknown by Minecraft, values that are
+With all of this data, PackOBF removes fields that are unknown by Minecraft, values that are
 already the default one, spaces and line breaks.
 > [!NOTE]
-> For any other JSON file, PackOBF will only simplify them, remove spaces, newlines, `.0` for numbers, etc.
+> For any other JSON file, PackOBF only simplifies them, removes spaces, newlines, etc.
 
 ### PNG Files
+
 PackOBF uses [an oxipng fork](https://github.com/LostEngine/oxipng) to losslessly minimize PNG files.  
 Moreover, if you enable the *Corrupt PNG Files* option (`--corrupt-png-files`), your PNG images will be
-corrupted and unreadable for a lof of image software but Minecraft and will remove some bytes from your PNG images.
+corrupted and unreadable for lots of image software except for Minecraft, and they will have some bytes removed.
 
 ### Resource pack file
-PackOBF has its own way of writing ZIP files, which will not work with some popular ZIP file extractors 
-but does work with Minecraft. This way of writing ZIP files is not conventional, but it allows saving file size
-when duplicated files are in the resource pack and does not write useless data like folders and other fields on the ZIP file.
-PackOBF by itself will break some file software, however, the `jar -xf output.zip` command from Java will still be able to unzip it.
-By enabling the *Block resource pack from unzipping* option (`--block-unzipping`), it will totally block Java and a lot of software
-(including JD-GUI, Minecraft mods) from unzipping your resource pack while Minecraft can still load it.
+
+PackOBF has its own way of writing ZIP files, which will break popular ZIP file extractors but works with Minecraft.
+This way of writing ZIP files is not conventional, but it allows saving file size when duplicated files are in the
+resource pack and does not write useless data like folders and other fields on the ZIP file.
+PackOBF by itself breaks some ZIP file software, however, the `jar -xf output.zip` command from Java will still be able
+to unzip it.
+By enabling the *Block resource pack unzipping* option (`--block-unzipping`), it will totally block JAR and lots
+of software (including JD-GUI, Minecraft mods) from unzipping your resource pack while Minecraft can still load it.
 
 ### Renaming files
-PackOBF is able to rename resource pack overlays, models, textures and sounds that don't override Minecraft files to smaller names
-(example: `assets/_/textures/i/a.png` instead of `assets/minecraft/textures/item/my_cool_item.png`) while keeping everything working.
 
-### Core Shaders (Experimental)
-PackOBF is able to parse core shaders, minify them, rename variables and functions to short names. It can be enabled using the
-`--shader-compression [none, minify, minify-and-obfuscate]` option, `minify-and-obfuscate` will rename variables and functions
-which might break your shaders, while `minify` does not.
+PackOBF is able to rename resource pack overlays, models, textures and sounds that don't override Minecraft files to
+smaller names (example: `assets/_/textures/i/a.png` instead of `assets/minecraft/textures/item/my_cool_item.png`) while
+keeping everything working.
+
+### Core Shaders (Experimental/Deprecated)
+
+PackOBF is able to parse core shaders, minify them, rename variables and functions to short names. It can be enabled
+using the `--shader-compression [none, minify, minify-and-obfuscate]` option, `minify-and-obfuscate` will rename 
+variables and functions which might break your shaders, while `minify` does not.
 
 ## License
-PackOBF is open-source software distributed under the MIT license. See [`LICENSE.md`](LICENSE.md) for complete license.
+
+PackOBF is open-source software (OSS) distributed under the MIT license. See [`LICENSE.md`](LICENSE.md) for complete license.
 
 > [!NOTE]
-> No code from any other project has been "stolen" or used as inspiration, all researches were made using public server resource packs and online resources such as [ImHex](https://github.com/werwolv/imhex).
+> No code from any other project has been "stolen" or used as inspiration, all researches were made using public server
+resource packs and online resources such as [ImHex](https://github.com/werwolv/imhex).
 
 ## How to use the library (for developers)
 
