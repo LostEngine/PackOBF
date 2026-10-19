@@ -10,7 +10,8 @@ public enum MinecraftVersion {
     V1_21_9(69),
     V1_21_11(75),
     V26_1(84),
-    V26_2(88);
+    V26_2(88),
+    V26_3(97);
 
     private final int id;
 

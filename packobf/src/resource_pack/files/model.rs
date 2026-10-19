@@ -88,8 +88,11 @@ pub struct Element {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rotation: Option<Rotation>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_2")]
     pub shade: Option<bool>,
+
+    #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_2")]
+    pub shade_direction_override: Option<String>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub light_emission: Option<u8>,

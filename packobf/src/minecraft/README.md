@@ -4,7 +4,7 @@ folder that have existed in 1.21.1, 1.21.2, 1.21.4, 1.21.5, 1.21.6, 1.21.7, 1.21
 To build these files, you first need to download an asset folder (from [mcasset](https://github.com/InventivetalentDev/minecraft-assets))
 then you can use this command to create a file in one asset folder:
 ```bash
-find . -type f ! -name "_*" ! -name "*.txt" | sed 's|^\./||' | sort > files.txt
+find . -type f ! -name "_*" ! -name "*.txt" ! -name "*.mcmeta" | sed 's|^\./||' | sed 's|\.[^.\/]*$||' | sort > files.txt
 ```
 
 To combine multiple asset lists from different versions, use:

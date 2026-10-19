@@ -22,6 +22,10 @@ pub(crate) fn is_none_or_newer_than_26_1<T>(value: &Option<T>) -> bool {
     value.is_none() || version::is_newer_than_26_1(&())
 }
 
+pub(crate) fn is_none_or_newer_than_26_2<T>(value: &Option<T>) -> bool {
+    value.is_none() || version::is_newer_than_26_2(&())
+}
+
 pub(crate) fn is_none_or_older_than_1_21_11<T>(value: &Option<T>) -> bool {
     value.is_none() || version::is_older_than_1_21_11(&())
 }

@@ -15,6 +15,7 @@ pub enum MinecraftVersion {
     V1_21_11 = 75,
     V26_1 = 84,
     V26_2 = 88,
+    V26_3 = 97,
 }
 
 impl MinecraftVersion {
@@ -30,6 +31,7 @@ impl MinecraftVersion {
             75 => Some(Self::V1_21_11),
             84 => Some(Self::V26_1),
             88 => Some(Self::V26_2),
+            97 => Some(Self::V26_3),
             _ => None,
         }
     }
@@ -79,6 +81,7 @@ version_check!(is_older_than_1_21_9, V1_21_9, <);
 version_check!(is_older_than_1_21_11, V1_21_11, <);
 version_check!(is_older_than_26_1, V26_1, <);
 version_check!(is_older_than_26_2, V26_2, <);
+version_check!(is_older_than_26_3, V26_3, <);
 
 version_check!(is_newer_than_1_21_1, V1_21_1, >);
 version_check!(is_newer_than_1_21_2, V1_21_2, >);
@@ -90,5 +93,6 @@ version_check!(is_newer_than_1_21_9, V1_21_9, >);
 version_check!(is_newer_than_1_21_11, V1_21_11, >);
 version_check!(is_newer_than_26_1, V26_1, >);
 version_check!(is_newer_than_26_2, V26_2, >);
+version_check!(is_newer_than_26_3, V26_3, >);
 
 version_check!(is_not_between_26_1_and_26_2, V26_1, V26_2, <>);

@@ -7,5 +7,6 @@
   - https://minecraft.wiki/
   - Minecraft release notes
 - Update [`/packobf/src/version.rs`](/packobf/src/version.rs)
-- Update Minecraft versions in [`packobf_gui/qml/main.qml`](/packobf_gui/qml/main.qml) and [`packobf_gui/src/cxxqt_object.rs`](/packobf_gui/src/cxxqt_object.rs)
+- Update Minecraft versions in [`packobf_gui/qml/main.qml`](/packobf_gui/qml/main.qml)
 - Update [`dev.misieur.packobf.options.MinecraftVersion`](/java/src/main/java/dev/misieur/packobf/options/MinecraftVersion.java) version enum
+- Update [`README.md`](/README.md)

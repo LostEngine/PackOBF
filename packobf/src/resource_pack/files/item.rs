@@ -143,7 +143,10 @@ pub enum TintSource {
     #[serde(rename = "grass", alias = "minecraft:grass")]
     Grass { temperature: f32, downfall: f32 },
     #[serde(rename = "map_color", alias = "minecraft:map_color")]
-    MapColor { default: serde_json::Value },
+    MapColor {
+        #[serde(skip_serializing_if = "version::is_newer_than_26_2")]
+        default: serde_json::Value
+    },
     #[serde(rename = "potion", alias = "minecraft:potion")]
     Potion { default: serde_json::Value },
     #[serde(rename = "team", alias = "minecraft:team")]

@@ -26,7 +26,7 @@ Options:
       --block-unzipping                          
       --corrupt-png-files                        
       --num-threads <NUM_THREADS>                
-      --target-version <TARGET_VERSION>          [possible values: v1-21-1, v1-21-2, v1-21-4, v1-21-5, v1-21-6, v1-21-7, v1-21-9, v1-21-11, v26-1, v26-2]
+      --target-version <TARGET_VERSION>          [possible values: v1-21-1, v1-21-2, v1-21-4, v1-21-5, v1-21-6, v1-21-7, v1-21-9, v1-21-11, v26-1, v26-2, v26-3]
   -h, --help                                     Print help
   -V, --version                                  Print version
 ```

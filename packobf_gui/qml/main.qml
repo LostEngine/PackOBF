@@ -242,7 +242,8 @@ ApplicationWindow {
                     {text: "1.21.9", value: 69},
                     {text: "1.21.11", value: 75},
                     {text: "26.1", value: 84},
-                    {text: "26.2", value: 88}
+                    {text: "26.2", value: 88},
+                    {text: "26.3", value: 97}
                 ]
                 textRole: "text"
                 currentIndex: indexOfValue(appController.target_version)
