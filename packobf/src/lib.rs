@@ -320,7 +320,7 @@ fn read_zip_entries(
             continue;
         }
 
-        let name = file.name().to_string();
+        let name = file.name()?.to_string();
         let mut content = Vec::with_capacity(file.size() as usize);
         file.read_to_end(&mut content)?;
 
