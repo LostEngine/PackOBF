@@ -1,0 +1,107 @@
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Identifier {
+    pub namespace: String,
+    pub path: String,
+}
+
+impl Identifier {
+    pub fn new(namespace: impl Into<String>, path: impl Into<String>) -> Self {
+        Self {
+            namespace: namespace.into(),
+            path: path.into(),
+        }
+    }
+
+    pub fn parse(identifier: &str) -> Self {
+        match identifier.split_once(':') {
+            Some((namespace, path)) => Self::new(namespace, path),
+            None => Self::new("minecraft", identifier),
+        }
+    }
+}
+
+impl std::fmt::Display for Identifier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.namespace == "minecraft" {
+            write!(f, "{}", self.path)
+        } else {
+            write!(f, "{}:{}", self.namespace, self.path)
+        }
+    }
+}
+
+impl Serialize for Identifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Identifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Self::parse(&String::deserialize(deserializer)?))
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct TextureId(pub Identifier);
+
+#[derive(Clone, Debug)]
+pub struct TextureIdWithExt(pub Identifier);
+
+#[derive(Clone, Debug)]
+pub struct ModelId(pub Identifier);
+
+#[derive(Clone, Debug)]
+pub struct SoundId(pub Identifier);
+
+macro_rules! impl_id_wrapper {
+    ($name:ident $(, $suffix:expr)?) => {
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}{}", self.0.to_string(), concat!($($suffix)?))
+            }
+        }
+
+        impl Serialize for $name {
+            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                serializer.serialize_str(&self.to_string())
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let string = String::deserialize(deserializer)?;
+                let path = {
+                    #[allow(unused_mut)]
+                    let mut s = string;
+                    $(
+                        if s.ends_with($suffix) {
+                            s.truncate(s.len() - $suffix.len());
+                        }
+                    )?
+                    s
+                };
+                Ok(Self(Identifier::parse(&path)))
+            }
+        }
+    };
+}
+
+impl_id_wrapper!(TextureId);
+impl_id_wrapper!(TextureIdWithExt, ".png");
+impl_id_wrapper!(ModelId);
+impl_id_wrapper!(SoundId);

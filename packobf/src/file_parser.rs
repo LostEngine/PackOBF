@@ -13,7 +13,7 @@ use crate::resource_pack::files::sound::Sound;
 use crate::resource_pack::files::sound_definitions::SoundDefinitions;
 use crate::resource_pack::files::unknowntexture::UnknownTexture;
 use crate::resource_pack::pack::ResourcePack;
-use crate::LogLevel::Error;
+use crate::LogLevel::{Error, Info};
 use crate::{get_type, parse_path, LogMessage, Progress};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use rayon::ThreadPool;
@@ -192,6 +192,12 @@ fn parse_resource_pack_file(
 fn json_file(logger: &UnboundedSender<LogMessage>, pack: &Arc<ResourcePack>, name: &str, content: &[u8]) {
     match serde_json::from_slice(content) {
         Ok(value) => {
+            let _ = logger.send(
+                LogMessage {
+                    level: Info,
+                    message: format!("JSON file: {}", name)
+                }
+            );
             pack.json_file(Json::new(name.to_owned(), value));
         }
         Err(e) => {

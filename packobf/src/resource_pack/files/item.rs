@@ -178,7 +178,7 @@ pub enum SpecialModelData {
         #[serde(skip_serializing_if = "version::is_newer_than_26_1")]
         texture: Identifier
     },
-    // bed atlas
+    // bed atlas 
     #[serde(rename = "bell", alias = "minecraft:bell")]
     Bell {},
     #[serde(rename = "book", alias = "minecraft:book")]
