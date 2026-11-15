@@ -1,7 +1,7 @@
 [package]
 name = "packobf"
 version = "0.3.0-beta.3"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 
 [dependencies]
@@ -19,14 +19,15 @@ sha2 = "0.11"
 rayon = "1.12"
 libdeflater = "1.26"
 phf = { version = "0.14", features = ["macros"] }
-optivorbis = "0.3"
 regex = "1.13"
 clap = { version = "4.6", features = ["derive"] }
 strum = "0.28"
 strum_macros = "0.28"
 arc-swap = "1"
 dhat = { version = "0.3", optional = true }
-fxhash = "0.2"
+crossbeam = "0.8"
+itertools = "0.15"
+vorbis_rs = "0.5"
 
 [build-dependencies]
 phf_codegen = "0.14"

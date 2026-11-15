@@ -5,21 +5,14 @@ edition = "2024"
 license = "MIT"
 
 [dependencies]
-
-tokio = { version = "1.54" }
-
-arboard = "3"
-
 packobf = { path = "../packobf" }
+tokio = { version = "1.54", features = ["sync"] }
 
-cxx = "1"
-
-cxx-qt = "0.8.1"
-cxx-qt-lib = {version = "0.8.1", features = ["full"]}
-
-[build-dependencies]
-cxx-qt-build = { version = "0.8.1", features = [ "link_qt_object_files" ] }
+[target.'cfg(target_os = "linux")'.dependencies]
+adw = { package = "libadwaita", version = "0.8", features = ["v1_5"] }
+gtk = { package = "gtk4", version = "0.10", features = ["v4_10"] }
 
 [features]
 default = []
+ffi = []
 profiling = ["packobf/profiling"]

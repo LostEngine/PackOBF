@@ -1,13 +1,12 @@
+use crate::LogLevel::Warning;
 use crate::cache::{Cache, ItemType};
+use crate::options::{Options, SoundQuality};
 use crate::resource_pack::identifier::Identifier;
-use crate::LogLevel::{Info, Warning};
-use crate::{profile_scope, LogMessage};
-use optivorbis::remuxer::ogg_to_ogg::{OggVorbisStreamPassthroughMangler, Settings};
-use optivorbis::VorbisCommentFieldsAction::Delete;
-use optivorbis::VorbisVendorStringAction::Empty;
-use optivorbis::{OggToOgg, Remuxer, VorbisOptimizerSettings};
-use sha2::{Digest, Sha256};
-use std::io::Cursor;
+use crate::resource_pack::mapping::get_mappings;
+use crate::{LogMessage, profile_scope};
+use std::io::{Cursor, Error};
+use std::num::NonZeroU8;
+use vorbis_rs::{VorbisBitrateManagementStrategy, VorbisDecoder, VorbisEncoderBuilder};
 
 #[derive(Clone, Debug)]
 pub struct Sound {
@@ -31,44 +30,12 @@ impl Sound {
 
     pub fn optimize(
         &self,
+        option: &Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
         cache: &Option<Cache>,
     ) -> Vec<u8> {
         profile_scope!(std::any::type_name_of_val(&Sound::optimize));
-        if let Some(cache) = cache {
-            let mut sha256 = Sha256::new();
-            sha256.update(self.bytes.as_slice());
-            let hash: [u8; 32] = sha256.finalize().into();
-
-            if let Some(bytes) = cache.with_item(&hash, ItemType::Sound, |it| it.data.clone()) {
-                let _ = logger.send(LogMessage {
-                    level: Info,
-                    message: format!("Sound '{}' was loaded from cache.", self.path()),
-                });
-                return bytes;
-            }
-        }
-        let mut source = Cursor::new(self.bytes.clone());
-        let sink = Vec::new();
-
-        let remuxer_settings = Settings {
-            randomize_stream_serials: false,
-            first_stream_serial_offset: 0,
-            ignore_start_sample_offset: true,
-            error_on_no_vorbis_streams: true,
-            verify_ogg_page_checksums: true,
-            vorbis_stream_mangler: OggVorbisStreamPassthroughMangler,
-        };
-        let mut optimizer_settings = VorbisOptimizerSettings::default();
-        optimizer_settings.vendor_string_action = Empty;
-        optimizer_settings.comment_fields_action = Delete;
-
-        let remuxer = OggToOgg::<OggVorbisStreamPassthroughMangler>::new(
-            remuxer_settings,
-            optimizer_settings,
-        );
-
-        match remuxer.remux(&mut source, sink) {
+        match convert_ogg(&self.bytes, 1, &option.sound_quality) {
             Ok(bytes) => {
                 if let Some(cache) = cache {
                     cache.add_item(&self.bytes, &*bytes, 0, ItemType::Sound);
@@ -90,13 +57,95 @@ impl Sound {
     }
 
     pub fn path(&self) -> String {
+        let mapped = get_mappings().sound_mappings
+            .get(&self.identifier.to_string())
+            .map_or_else(|| self.identifier.clone(), |id| Identifier::parse(id));
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
             x => format!("{x}/"),
         };
         format!(
             "{}assets/{}/sounds/{}.ogg",
-            prefix, self.identifier.namespace, self.identifier.path
+            prefix, mapped.namespace, mapped.path
         )
     }
+}
+
+pub fn convert_ogg(
+    input: &[u8],
+    channels: u8,
+    quality: &SoundQuality,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    assert!((1..=2).contains(&channels));
+
+    let mut decoder = VorbisDecoder::new(Cursor::new(input))?;
+    let sample_rate = decoder.sampling_frequency();
+
+    let quality = match quality.value() {
+        Some(quality) => quality,
+        None => {
+            let mut total_samples = 0_u64;
+
+            while let Some(block) = decoder.decode_audio_block()? {
+                total_samples += block.samples()[0].len() as u64;
+            }
+
+            let duration = total_samples as f64 / sample_rate.get() as f64;
+
+            decoder = VorbisDecoder::new(Cursor::new(input))?;
+
+            SoundQuality::dynamic_quality(duration)
+        }
+    };
+
+    let mut output = Vec::new();
+
+    let mut builder = VorbisEncoderBuilder::new_with_serial(
+        sample_rate,
+        NonZeroU8::new(channels).unwrap(),
+        &mut output,
+        0,
+    );
+
+    builder.bitrate_management_strategy(
+        VorbisBitrateManagementStrategy::QualityVbr {
+            target_quality: quality,
+        },
+    );
+
+    let mut encoder = builder.build()?;
+
+    while let Some(block) = decoder.decode_audio_block()? {
+        let samples = block.samples();
+
+        let converted: Vec<Vec<f32>> = match (samples.len(), channels) {
+            // Mono to Mono or Stereo to Stereo (copies the data)
+            (1, 1) | (2, 2) => {
+                samples.iter().map(|s| s.to_vec()).collect()
+            }
+
+            // Stereo to Mono by averaging their samples
+            (2, 1) => {
+                let mono = samples[0]
+                    .iter()
+                    .zip(samples[1].iter())
+                    .map(|(l, r)| (l + r) * 0.5)
+                    .collect();
+
+                vec![mono]
+            }
+
+            // Mono to Stereo (duplicates the samples)
+            (1, 2) => {
+                vec![samples[0].to_vec(), samples[0].to_vec()]
+            }
+
+            _ => Err(Error::other(format!("Unsupported number of channels: {}", samples.len())))?,
+        };
+
+        encoder.encode_audio_block(&converted)?;
+    }
+
+    encoder.finish()?;
+    Ok(output)
 }

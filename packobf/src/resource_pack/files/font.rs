@@ -1,8 +1,7 @@
-use crate::resource_pack::identifier::{Identifier, TextureIdWithExt};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::minecraft::json::font::java_assets_font_Font;
+use crate::resource_pack::identifier::Identifier;
 use crate::utils::clean_json_numbers;
-use crate::version;
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Font {
@@ -11,86 +10,8 @@ pub struct Font {
     #[serde(skip)]
     pub identifier: Identifier,
 
-    pub providers: Vec<FontProvider>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum FontProvider {
-    #[serde(rename = "bitmap")]
-    Bitmap {
-        file: TextureIdWithExt,
-        #[serde(default = "default_ascent", deserialize_with = "crate::json::deserializers::deserialize_i32")]
-        ascent: i32,
-        #[serde(default = "default_height", deserialize_with = "crate::json::deserializers::deserialize_i32")]
-        height: i32,
-        chars: Vec<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        filter: Option<FontFilter>,
-    },
-
-    #[serde(rename = "space")]
-    Space {
-        advances: HashMap<String, i32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        filter: Option<FontFilter>,
-    },
-
-    #[serde(rename = "ttf")]
-    Ttf {
-        file: Identifier,
-        #[serde(default = "default_size")]
-        size: f32,
-        #[serde(default = "default_oversample")]
-        oversample: f32,
-        #[serde(default, skip_serializing_if = "Vec::is_empty")]
-        shift: Vec<f32>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        skip: Option<TtfSkip>,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        filter: Option<FontFilter>,
-    },
-
-    #[serde(rename = "unihex")]
-    Unihex {
-        hex_file: String,
-        #[serde(default, skip_serializing_if = "is_empty_or_older_than_26_1")]
-        size_overrides: Vec<HexSizeOverride>,
-        #[serde(skip_serializing_if = "is_none_or_older_than_26_1")]
-        filter: Option<FontFilter>,
-    },
-
-    #[serde(rename = "reference")]
-    Reference {
-        id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        filter: Option<FontFilter>,
-    },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FontFilter {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uniform: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub jp: Option<bool>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HexSizeOverride {
-    pub from: String,
-    pub to: String,
-    #[serde(deserialize_with = "crate::json::deserializers::deserialize_i32")]
-    pub left: i32,
-    #[serde(deserialize_with = "crate::json::deserializers::deserialize_i32")]
-    pub right: i32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum TtfSkip {
-    Single(String),
-    Multiple(Vec<String>),
+    #[serde(flatten)]
+    pub json: java_assets_font_Font,
 }
 
 impl std::fmt::Display for Font {
@@ -99,17 +20,6 @@ impl std::fmt::Display for Font {
         clean_json_numbers(&mut val);
         write!(f, "{}", serde_json::to_string(&val).map_err(|_| std::fmt::Error)?)
     }
-}
-
-const fn default_ascent() -> i32 { 7 }
-const fn default_height() -> i32 { 8 }
-const fn default_size() -> f32 { 11.0 }
-const fn default_oversample() -> f32 { 1.5 }
-pub fn is_none_or_older_than_26_1<T>(value: &Option<T>) -> bool {
-    value.is_none() || version::is_older_than_26_1(&())
-}
-pub fn is_empty_or_older_than_26_1<T>(value: &[T]) -> bool {
-    value.is_empty() || version::is_older_than_26_1(&())
 }
 
 impl Font {

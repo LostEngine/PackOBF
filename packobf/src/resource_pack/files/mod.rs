@@ -1,5 +1,5 @@
 pub mod model;
-pub mod resource_pack_file;
+pub mod unknown_file;
 pub mod asset_texture;
 pub mod shader;
 pub mod json;
@@ -7,8 +7,9 @@ pub mod item;
 pub mod blockstate;
 pub mod font;
 pub mod sound;
-pub mod sound_definitions;
+pub mod sounds;
 pub mod atlas;
 pub mod unknowntexture;
 pub mod pack_mcmeta;
 pub mod texture;
+pub mod lang;

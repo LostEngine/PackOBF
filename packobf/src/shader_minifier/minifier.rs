@@ -232,20 +232,18 @@ impl VisitorMut for Minifier {
             if !has_forbidden_qualifier {
                 if let Some(identifier) = list.head.name.clone() {
                     let name = identifier.0.to_string();
-                    if !name.starts_with("gl_") {
-                        if let Some(short) = self.local_mapping.get(&name) {
+                    if !name.starts_with("gl_")
+                        && let Some(short) = self.local_mapping.get(&name) {
                             list.head.name = Some(IdentifierData::from(short.as_str()).into());
                         }
-                    }
                 }
 
                 for tail in &mut list.tail {
                     let t_name = tail.ident.ident.0.to_string();
-                    if !t_name.starts_with("gl_") {
-                        if let Some(short) = self.local_mapping.get(&t_name) {
+                    if !t_name.starts_with("gl_")
+                        && let Some(short) = self.local_mapping.get(&t_name) {
                             tail.ident.ident.0 = SmolStr::new(short);
                         }
-                    }
                 }
             }
         }
@@ -261,8 +259,8 @@ impl VisitorMut for Minifier {
         }
 
         // minify `vec4(1.0, 1.0, 1.0, 1.0)` to `vec(1.)`
-        if let ExprData::FunCall(ident, args) = &mut expr.content {
-            if let Some(name_node) = get_fun_name(ident) {
+        if let ExprData::FunCall(ident, args) = &mut expr.content
+            && let Some(name_node) = get_fun_name(ident) {
                 let name = name_node;
 
                 let expected_len = match name.as_str() {
@@ -272,8 +270,8 @@ impl VisitorMut for Minifier {
                     _ => None,
                 };
 
-                if let Some(len) = expected_len {
-                    if args.len() == len {
+                if let Some(len) = expected_len
+                    && args.len() == len {
                         let first_val = args.first().and_then(|first_arg| if let ExprData::FloatConst(f) = &first_arg.content {
                                 Some(*f)
                             } else {
@@ -294,17 +292,14 @@ impl VisitorMut for Minifier {
                             }
                         }
                     }
-                }
             }
-        }
 
         // minify `a = a * a` to `a *= a`
-        if let ExprData::Assignment(ref mut lhs, ref op, ref mut rhs) = expr.content {
-            if let AssignmentOpData::Equal = op.content {
-                if let ExprData::Binary(ref mut bin_op, ref mut bin_lhs, ref mut bin_rhs) =
+        if let ExprData::Assignment(ref mut lhs, ref op, ref mut rhs) = expr.content
+            && let AssignmentOpData::Equal = op.content
+                && let ExprData::Binary(ref mut bin_op, ref mut bin_lhs, ref mut bin_rhs) =
                     rhs.content
-                {
-                    if lhs == bin_lhs {
+                    && lhs == bin_lhs {
                         let new_op = match bin_op.content {
                             BinaryOpData::Add => Some(AssignmentOpData::Add),
                             BinaryOpData::Sub => Some(AssignmentOpData::Sub),
@@ -332,9 +327,6 @@ impl VisitorMut for Minifier {
                             );
                         }
                     }
-                }
-            }
-        }
 
         // minify `vec.rgba` to `vec.xyzw` (useful for compression in zip files to reduce the number of different characters)
         if let ExprData::Dot(ref _sub_expr, ref mut field) = expr.content {

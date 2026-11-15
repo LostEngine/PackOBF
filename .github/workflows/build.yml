@@ -55,74 +55,53 @@ jobs:
       matrix:
         include:
           # Linux x64 GNU
-          - os: ubuntu-22.04 # using an older version of Ubuntu for linuxdeployqt
+          - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             artifact: linux-x86_64
             cli: packobf_cli
-            gui: packobf_gui
             java-lib: librust.so
-            qt-arch: linux_gcc_64
-            qt-version: 6.8.3
 
           # Linux x64 MUSL
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact: linux-x86_64-musl
             cli: packobf_cli
-            gui: ""
             java-lib: librust.so
-            qt-arch: ""
-            qt-version: ""
 
           # Linux ARM64
-          - os: ubuntu-22.04 # using an older version of Ubuntu for linuxdeployqt
+          - os: ubuntu-22.04
             target: aarch64-unknown-linux-gnu
             artifact: linux-aarch64
             cli: packobf_cli
-            gui: ""
             java-lib: librust.so
-            qt-arch: ""
-            qt-version: ""
 
           # macOS Intel
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact: macos-x86_64
             cli: packobf_cli
-            gui: packobf_gui
             java-lib: librust.dylib
-            qt-arch: clang_64
-            qt-version: 6.11.2
 
           # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact: macos-aarch64
             cli: packobf_cli
-            gui: packobf_gui
             java-lib: librust.dylib
-            qt-arch: clang_64
-            qt-version: 6.11.2
 
           # Windows x64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact: windows-x86_64
             cli: packobf_cli.exe
-            gui: packobf_gui.exe
             java-lib: rust.dll
-            qt-arch: win64_msvc2022_64
-            qt-version: 6.8.3
 
           # Windows ARM64
           - os: windows-latest
             target: aarch64-pc-windows-msvc
             artifact: windows-aarch64
             cli: packobf_cli.exe
-            gui: ""
             java-lib: rust.dll
-            qt-arch: ""
-            qt-version: ""
     steps:
       - name: Checkout sources
         uses: actions/checkout@v4
@@ -136,16 +115,7 @@ jobs:
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
         with:
-          prefix-key: "v1-rust-qt-${{ matrix.qt-version }}-${{ matrix.os }}-${{ matrix.target }}"
-
-      - name: Install Qt
-        if: matrix.gui != ''
-        uses: jurplel/install-qt-action@v4
-        with:
-          version: ${{ matrix.qt-version }}
-          arch: ${{ matrix.qt-arch }}
-          cache: 'true'
-          cache-key-prefix: "v1-qt-qt-${{ matrix.qt-version }}-${{ matrix.os }}-${{ matrix.target }}"
+          prefix-key: "v1-rust-${{ matrix.os }}-${{ matrix.target }}"
 
       - name: Install cross (linux-x86_64-musl and linux-aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu' || matrix.target == 'x86_64-unknown-linux-musl'
@@ -154,8 +124,8 @@ jobs:
           tool: cross
 
       - name: Build
-        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl' && matrix.target != 'aarch64-pc-windows-msvc'
-        run: cargo build --release --target ${{ matrix.target }}
+        if: matrix.target != 'aarch64-unknown-linux-gnu' && matrix.target != 'x86_64-unknown-linux-musl'
+        run: cargo build --release --target ${{ matrix.target }} -p packobf_cli -p rust
 
       - name: Build (linux-aarch64)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -164,10 +134,6 @@ jobs:
       - name: Build (linux-x86_64-musl)
         if: matrix.target == 'x86_64-unknown-linux-musl'
         run: cross build --release --target ${{ matrix.target }} -p packobf_cli
-
-      - name: Build (aarch64-pc-windows-msvc)
-        if: matrix.target == 'aarch64-pc-windows-msvc'
-        run: cargo build --release --target ${{ matrix.target }} -p packobf_cli -p rust
 
       - name: Download LICENSE.md
         uses: actions/download-artifact@v4
@@ -187,84 +153,6 @@ jobs:
           name: cli-${{ matrix.artifact }}
           path: dist/*
 
-      - name: Prepare GUI Executable
-        if: matrix.gui != ''
-        # Always make sure files that are published contain the license files
-        run: |
-          rm -rf dist && mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.gui }} dist/
-          cp LICENSE.md dist/
-
-      - name: Deploy Qt Dependencies (Windows)
-        if: runner.os == 'Windows' && matrix.gui != ''
-        run: |
-          windeployqt --qmldir packobf_gui --no-translations --no-opengl-sw --no-system-d3d-compiler --no-compiler-runtime dist/${{ matrix.gui }}
-          
-          cp /c/Windows/System32/msvcp140.dll dist/
-          cp /c/Windows/System32/vcruntime140.dll dist/
-          cp /c/Windows/System32/msvcp140_1.dll dist/
-          cp /c/Windows/System32/msvcp140_2.dll dist/
-          cp /c/Windows/System32/vcruntime140_1.dll dist/
-
-          # Removing all unused DLLs
-          rm -rf dist/generic dist/iconengines dist/imageformats dist/networkinformation dist/qmltooling dist/tls dist/Qt6LabsFolderListModel.dll dist/Qt6QuickControls2BasicStyleImpl.dll dist/Qt6QuickControls2FluentWinUI3StyleImpl.dll dist/Qt6QuickControls2Imagine.dll dist/Qt6QuickControls2ImagineStyleImpl.dll dist/Qt6QuickControls2Material.dll dist/Qt6QuickControls2MaterialStyleImpl.dll dist/Qt6QuickControls2Universal.dll dist/Qt6QuickControls2UniversalStyleImpl.dll dist/Qt6QuickControls2WindowsStyleImpl.dll dist/Qt6QuickEffects.dll dist/Qt6QuickShapes.dll dist/Qt6Svg.dll
-
-      - name: Deploy Qt Dependencies (macOS)
-        if: runner.os == 'macOS' && matrix.gui != ''
-        run: |
-          mkdir -p dist/PackOBF\ GUI.app/Contents/MacOS
-          cp dist/${{ matrix.gui }} dist/PackOBF\ GUI.app/Contents/MacOS/PackOBF\ GUI
-          
-          mkdir -p dist/PackOBF\ GUI.app/Contents/Resources
-          mv dist/LICENSE.md dist/PackOBF\ GUI.app/Contents/Resources/
-
-          cd dist
-          macdeployqt PackOBF\ GUI.app -dmg -qmldir=../packobf_gui
-          cd ..
-
-          rm -rf dist/PackOBF\ GUI.app
-          rm -f dist/${{ matrix.gui }}
-
-      - name: Deploy Qt Dependencies (Linux)
-        if: runner.os == 'Linux' && matrix.gui != ''
-        run: |
-          wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage"
-          chmod +x linuxdeployqt-continuous-x86_64.AppImage
-          
-          # Cleanup Qt installation
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/printsupport
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/sqldrivers
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/help
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/designer
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/qmltooling
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/qmlls
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/qmllint
-          rm -rf ../Qt/${{ matrix.qt-version }}/gcc_64/plugins/platformthemes/libqgtk3.so
-
-          cat <<EOF > dist/packobf_gui.desktop
-          [Desktop Entry]
-          Type=Application
-          Name=packobf
-          Exec=packobf_gui
-          Icon=packobf_gui
-          Categories=Utility;
-          EOF
-          touch dist/packobf_gui.png
-
-          export APPIMAGE_EXTRACT_AND_RUN=1
-          ./linuxdeployqt-continuous-x86_64.AppImage dist/${{ matrix.gui }} -appimage -qmldir=packobf_gui -no-translations -exclude-libs=networkinformation,qmltooling,tls -extra-plugins=platformthemes/libqxdgdesktopportal.so
-
-          # The AppImage will already contain the license file
-          rm -rf dist && mkdir -p dist
-          mv packobf-*.AppImage dist/packobf-gui-${{ matrix.artifact }}.AppImage
-
-      - name: Upload GUI Executable
-        if: matrix.gui != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: gui-${{ matrix.artifact }}
-          path: dist/*
-
       - name: Prepare Java Native Library
         if: matrix.target != 'x86_64-unknown-linux-musl'
         run: |
@@ -278,6 +166,93 @@ jobs:
         with:
           name: java-lib-${{ matrix.artifact }}
           path: dist/*
+
+  buildGui:
+    name: Build GUI (${{ matrix.artifact }})
+    runs-on: ${{ matrix.os }}
+    needs: license
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            artifact: linux-x86_64
+          - os: macos-15-intel
+            artifact: macos-x86_64
+            mac-arch: x86_64
+          - os: macos-15
+            artifact: macos-aarch64
+            mac-arch: arm64
+          - os: windows-2025
+            artifact: windows-x86_64
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "v1-rust-gui-${{ matrix.os }}"
+          workspaces: |
+            .
+            . -> packobf_gui/target
+            . -> packobf_gui/target/macos-rust
+
+      - name: Download LICENSE.md
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-license
+
+      - name: Install GTK and libadwaita
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev
+
+      - name: Prepare GTK frontend
+        if: runner.os == 'Linux'
+        run: |
+          cargo build --locked --release -p packobf_gui
+          mkdir -p dist
+          cp target/release/packobf_gui dist/
+          cp LICENSE.md dist/
+
+      - name: Package SwiftUI frontend
+        if: runner.os == 'macOS'
+        run: |
+          bash packobf_gui/platforms/macos/build.sh release
+          mkdir -p dist dmg
+          ditto "packobf_gui/target/macos/${{ matrix.mac-arch }}/release/PackOBF.app" dmg/PackOBF.app
+          cp LICENSE.md dmg/
+          hdiutil create -volname PackOBF -srcfolder dmg -format UDZO dist/packobf-gui-${{ matrix.artifact }}.dmg
+
+      - name: Install .NET
+        if: runner.os == 'Windows'
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Package WinUI frontend
+        if: runner.os == 'Windows'
+        run: |
+          dotnet publish packobf_gui/platforms/windows/PackOBF.Windows.csproj \
+            -c Release -p:Platform=x64 -o dist
+          test -f dist/PackOBF.exe
+          test -f dist/packobf_gui.dll
+          cp LICENSE.md dist/
+
+      - name: Upload GUI
+        uses: actions/upload-artifact@v4
+        with:
+          name: gui-${{ matrix.artifact }}
+          path: dist/
+          if-no-files-found: error
 
   buildJava:
     name: Build Java Library

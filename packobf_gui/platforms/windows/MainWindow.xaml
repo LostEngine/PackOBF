@@ -1,0 +1,280 @@
+<Window
+    x:Class="PackObf.Windows.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:PackObf.Windows"
+    Title="PackOBF">
+    <Grid x:Name="Root" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.Resources>
+            <Style x:Key="Description" TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="FontSize" Value="12" />
+            </Style>
+            <Style x:Key="SettingsRow" TargetType="Grid">
+                <Setter Property="MinHeight" Value="52" />
+                <Setter Property="Padding" Value="14,8" />
+                <Setter Property="ColumnSpacing" Value="12" />
+                <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+                <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+                <Setter Property="BorderThickness" Value="1" />
+                <Setter Property="CornerRadius" Value="6" />
+            </Style>
+            <Style x:Key="RowLabel" TargetType="StackPanel">
+                <Setter Property="Spacing" Value="2" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+            <Style x:Key="PathLabel" TargetType="TextBlock">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style x:Key="PathField" TargetType="TextBox">
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="Padding" Value="0,5" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderBrush" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0,0,0,2" />
+            </Style>
+        </Grid.Resources>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel MaxWidth="680" Padding="24,18,24,24" Spacing="16">
+                <StackPanel Spacing="3">
+                    <TextBlock Text="Resource pack" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Select a Minecraft: Java Edition resource pack ZIP."
+                               Style="{StaticResource Description}" />
+                </StackPanel>
+                <StackPanel Spacing="4">
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" MaxWidth="170" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="InputPathLabel" Text="Resource pack file" Style="{StaticResource PathLabel}" />
+                        <TextBox x:Name="InputPath" Grid.Column="1" Style="{StaticResource PathField}"
+                                 AutomationProperties.LabeledBy="{x:Bind InputPathLabel}" />
+                        <Button Grid.Column="2" VerticalAlignment="Center" Click="ChooseInput"
+                                AutomationProperties.Name="Select resource pack"
+                                ToolTipService.ToolTip="Select resource pack">
+                            <FontIcon Glyph="&#xE838;" />
+                        </Button>
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" MaxWidth="170" />
+                            <ColumnDefinition Width="3*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="CachePathLabel" Text="Cache file (recommended)" Style="{StaticResource PathLabel}" />
+                        <TextBox x:Name="CachePath" Grid.Column="1" Style="{StaticResource PathField}"
+                                 AutomationProperties.LabeledBy="{x:Bind CachePathLabel}" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Button Click="ImportCache" AutomationProperties.Name="Import cache file"
+                                    ToolTipService.ToolTip="Import cache file">
+                                <FontIcon Glyph="&#xE838;" />
+                            </Button>
+                            <Button Click="CreateCache" AutomationProperties.Name="Create cache file"
+                                    ToolTipService.ToolTip="Create cache file">
+                                <Path Width="20" Height="20" Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                      StrokeThickness="1.4" StrokeLineJoin="Round"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                      Data="M 4,1.5 H 11 L 16,6.5 V 18.5 H 4 Z M 11,1.5 V 6.5 H 16 M 7,12 H 13 M 10,9 V 15" />
+                            </Button>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Optimization settings" Style="{StaticResource SubtitleTextBlockStyle}"
+                               Margin="0,0,0,4" />
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Compression" TextWrapping="Wrap" />
+                            <TextBlock Text="Global compression level for the resource pack." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ComboBox x:Name="Compression" Grid.Column="1" VerticalAlignment="Center"
+                                  MinWidth="110" AutomationProperties.Name="Compression">
+                            <ComboBoxItem Content="Fast" />
+                            <ComboBoxItem Content="Normal" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Shader compression (Experimental)" TextWrapping="Wrap" />
+                            <TextBlock Text="Parses GLSL core shaders to minify and obfuscate them." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ComboBox x:Name="Shader" Grid.Column="1" VerticalAlignment="Center"
+                                  MinWidth="110" AutomationProperties.Name="Shader compression (Experimental)">
+                            <ComboBoxItem Content="None" />
+                            <ComboBoxItem Content="Minify" />
+                            <ComboBoxItem Content="Minify and obfuscate" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Sound quality" TextWrapping="Wrap" />
+                            <TextBlock Text="Re-encodes sound files using libvorbis with the requested quality." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ComboBox x:Name="Sound" Grid.Column="1" VerticalAlignment="Center"
+                                  MinWidth="110" AutomationProperties.Name="Sound quality">
+                            <ComboBoxItem Content="Dynamic" />
+                            <ComboBoxItem Content="-1" />
+                            <ComboBoxItem Content="0" />
+                            <ComboBoxItem Content="1" />
+                            <ComboBoxItem Content="2" />
+                            <ComboBoxItem Content="3" />
+                            <ComboBoxItem Content="4" />
+                            <ComboBoxItem Content="5" />
+                            <ComboBoxItem Content="6" />
+                            <ComboBoxItem Content="7" />
+                            <ComboBoxItem Content="8" />
+                            <ComboBoxItem Content="9" />
+                            <ComboBoxItem Content="10" />
+                        </ComboBox>
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Target Minecraft version" TextWrapping="Wrap" />
+                            <TextBlock Text="Removes parts of the resource pack specific to other Minecraft versions." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ComboBox x:Name="Version" Grid.Column="1" VerticalAlignment="Center"
+                                  MinWidth="110" AutomationProperties.Name="Target Minecraft version" />
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Rename files" TextWrapping="Wrap" />
+                            <TextBlock Text="Renames textures, models, and sounds to shorter names." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="Rename" Grid.Column="1" VerticalAlignment="Center"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Rename files" />
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Block resource pack unzipping" TextWrapping="Wrap" />
+                            <TextBlock Text="Adds some bytes to the resource pack to prevent files from being extracted on a file system." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="BlockUnzipping" Grid.Column="1" VerticalAlignment="Center"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Block resource pack unzipping" />
+                    </Grid>
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Corrupt PNG files" TextWrapping="Wrap" />
+                            <TextBlock Text="Corrupts PNG files in a way that makes them unreadable for most software except for Minecraft." Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="CorruptPng" Grid.Column="1" VerticalAlignment="Center"
+                                      MinWidth="0" OnContent="" OffContent="" AutomationProperties.Name="Corrupt PNG files" />
+                    </Grid>
+                </StackPanel>
+
+                <Expander Header="Advanced options" HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Stretch" Padding="0">
+                    <Grid Style="{StaticResource SettingsRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Style="{StaticResource RowLabel}">
+                            <TextBlock Text="Worker threads" TextWrapping="Wrap" />
+                            <TextBlock Text="Zero for automatic" Style="{StaticResource Description}" />
+                        </StackPanel>
+                        <NumberBox x:Name="Threads" Grid.Column="1" Width="106" VerticalAlignment="Center"
+                                   Minimum="0" Maximum="256" SmallChange="1" SpinButtonPlacementMode="Compact"
+                                   AutomationProperties.Name="Worker threads" />
+                    </Grid>
+                </Expander>
+
+                <StackPanel Spacing="6">
+                    <ToggleButton x:Name="LogToggle" Content="Show logs" Click="ToggleLogs" />
+                    <StackPanel x:Name="LogPanel" Spacing="6" Visibility="Collapsed">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <CheckBox x:Name="InfoFilter" Content="Info" IsChecked="True" MinWidth="0" />
+                                <CheckBox x:Name="WarningFilter" Content="Warning" IsChecked="True" MinWidth="0" />
+                                <CheckBox x:Name="ErrorFilter" Content="Error" IsChecked="True" MinWidth="0" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="Copy" Click="CopyLogs"
+                                    ToolTipService.ToolTip="Copy all log messages" />
+                        </Grid>
+                        <Border BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1" CornerRadius="6"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                            <ListView x:Name="LogList" Height="164" SelectionMode="None" IsItemClickEnabled="False"
+                                      AutomationProperties.Name="Optimization logs"
+                                      ScrollViewer.VerticalScrollBarVisibility="Auto">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:LogRow">
+                                        <TextBlock Text="{x:Bind Line}" Foreground="{x:Bind Foreground}"
+                                                   FontWeight="SemiBold" TextWrapping="Wrap"
+                                                   IsTextSelectionEnabled="True" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="MinHeight" Value="0" />
+                                        <Setter Property="Padding" Value="8,2" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                            </ListView>
+                        </Border>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="1" Padding="16,8" ColumnSpacing="8"
+              Background="{ThemeResource LayerFillColorDefaultBrush}"
+              BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="0,1,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="Status" Text="Idle" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+            <ProgressRing x:Name="Spinner" Grid.Column="1" Width="24" Height="24"
+                          Visibility="Collapsed" AutomationProperties.Name="Processing" />
+            <Button x:Name="OptimizeButton" Grid.Column="1" Content="Optimize" Click="Optimize"
+                    IsEnabled="False" Style="{StaticResource AccentButtonStyle}" />
+            <Button x:Name="SaveButton" Grid.Column="2" Content="Save file" Click="SaveOutput"
+                    Visibility="Collapsed" Style="{StaticResource AccentButtonStyle}" />
+        </Grid>
+    </Grid>
+</Window>

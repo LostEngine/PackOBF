@@ -6,10 +6,10 @@ use jni::{
     objects::{JByteArray, JClass},
     sys::jbyteArray,
 };
-use packobf::options::{Compression, Options, ShaderCompression};
+use packobf::options::{Compression, Options, ShaderCompression, SoundQuality};
+use packobf::version::MinecraftVersion;
 use packobf::{LogMessage, Progress, process_zip};
 use tokio::sync::watch;
-use packobf::version::MinecraftVersion;
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
@@ -39,6 +39,9 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
             let shader_comp_val = env
                 .get_field(&options, jni_str!("shaderCompression"), jni_sig!("I"))?
                 .i()?;
+            let sound_qual_val = env
+                .get_field(&options, jni_str!("soundQuality"), jni_sig!("I"))?
+                .i()?;
 
             Options {
                 compression: Compression::from_u8(comp_val.try_into().unwrap_or(0)),
@@ -47,6 +50,21 @@ pub extern "system" fn Java_dev_misieur_packobf_Native_optimizeZip<'caller>(
                     1 => ShaderCompression::Minify,
                     2 => ShaderCompression::MinifyAndObfuscate,
                     _ => ShaderCompression::None
+                },
+                sound_quality: match sound_qual_val {
+                    -1 => SoundQuality::MinusOne,
+                    0 => SoundQuality::Zero,
+                    1 => SoundQuality::One,
+                    2 => SoundQuality::Two,
+                    3 => SoundQuality::Three,
+                    4 => SoundQuality::Four,
+                    5 => SoundQuality::Five,
+                    6 => SoundQuality::Six,
+                    7 => SoundQuality::Seven,
+                    8 => SoundQuality::Eight,
+                    9 => SoundQuality::Nine,
+                    10 => SoundQuality::Ten,
+                    _ => SoundQuality::Dynamic
                 },
                 rename_files: env
                     .get_field(&options, jni_str!("renameFiles"), jni_sig!("Z"))?

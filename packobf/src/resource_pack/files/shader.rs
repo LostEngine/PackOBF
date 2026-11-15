@@ -18,32 +18,33 @@ impl Shader {
     }
 
     pub fn optimize(
-        &self,
+        path: &String,
+        content: String,
         options: &crate::options::Options,
         logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
     ) -> String {
         if options.shader_compression == ShaderCompression::None {
-            return self.content.clone();
+            return content;
         }
         match Minifier::default().minify(
-            &self.content,
+            &content,
             options.shader_compression == ShaderCompression::MinifyAndObfuscate,
         ) {
             Ok(minified_code) => {
-                if !minified_code.is_empty() && minified_code != self.content {
+                if !minified_code.is_empty() && minified_code != content {
                     return minified_code;
                 }
-                self.content.clone()
+                content
             }
             Err(e) => {
                 let _ = logger.send(LogMessage {
                     level: Warning,
                     message: format!(
                         "Could not minify shader '{}'. Skipping optimization. Error: {}",
-                        self.path, e
+                        path, e
                     ),
                 });
-                self.content.clone()
+                content
             }
         }
     }

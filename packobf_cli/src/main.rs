@@ -122,11 +122,12 @@ pub async fn run_progress_loop(
                     LogLevel::Error => style(format!("✘ Error: {}", log.message)).red().bold(),
                 };
 
-                if let Some(ref pb) = current_pb {
+                /*if let Some(ref pb) = current_pb {
                     pb.println(format!("{}", msg));
                 } else {
                     eprintln!("{}", msg);
-                }
+                }*/
+                println!("{}", msg);
             }
 
             Ok(_) = rx.changed() => {

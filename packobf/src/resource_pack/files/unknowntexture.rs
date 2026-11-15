@@ -1,6 +1,3 @@
-use crate::cache::Cache;
-use crate::LogMessage;
-use crate::options::Options;
 use crate::resource_pack::files::texture::Texture;
 
 #[derive(Clone, Debug)]
@@ -16,14 +13,5 @@ impl UnknownTexture {
             path: path.into(),
             texture,
         }
-    }
-
-    pub fn optimize(
-        self,
-        options: &Options,
-        logger: &tokio::sync::mpsc::UnboundedSender<LogMessage>,
-        cache: &Option<Cache>,
-    ) -> Vec<u8> {
-        self.texture.optimize(options, logger, cache, self.path.as_str())
     }
 }

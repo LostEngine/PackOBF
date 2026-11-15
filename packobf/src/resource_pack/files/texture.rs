@@ -33,20 +33,18 @@ impl Texture {
             (c, hash)
         });
         let compression_value = CompressionValue::new(options.compression, options.corrupt_png_files);
-        if let Some(cache_data) = cache_data {
-            if let Some(bytes) = cache_data.0
+        if let Some(cache_data) = cache_data &&
+            let Some(bytes) = cache_data.0
                 .with_item(&cache_data.1, ItemType::Image, |it| {
                     compression_value.is_compatible_with(CompressionValue::from(it.compression))
                         .then(|| it.data.clone())
                 })
-                .flatten()
-            {
-                let _ = logger.send(LogMessage {
-                    level: LogLevel::Info,
-                    message: format!("Image '{}' was loaded from cache.", path),
-                });
-                return bytes;
-            }
+                .flatten() {
+            let _ = logger.send(LogMessage {
+                level: LogLevel::Info,
+                message: format!("Image '{}' was loaded from cache.", path),
+            });
+            return bytes;
         }
 
         let mut oxipng_options = OPTIONS.clone();

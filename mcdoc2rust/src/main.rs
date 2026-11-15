@@ -15,7 +15,7 @@ mod resource_pack;
 mod version;
 
 use crate::export::McdocFile;
-use crate::generator::Generator;
+use crate::generator::{Generator, INTEGER_DESERIALIZERS};
 
 const LARGE_TYPE_CLOSURE_WARNING_THRESHOLD: usize = 100;
 
@@ -28,6 +28,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     //let rust_code = Generator::new(&schema).generate_all();
     //std::fs::write("src/generated.rs", rust_code)?;
+
+    std::fs::create_dir_all("src/generated")?;
+    let mut generated_modules = String::from(
+        "#![allow(dead_code, unused_imports, non_snake_case, non_camel_case_types)]\n\
+         use serde::Deserialize;\n\n",
+    );
+    generated_modules.push_str(INTEGER_DESERIALIZERS);
+    generated_modules.push_str("\n\n");
+    for module in [
+        "atlas",
+        "block_state_definition",
+        "equipment",
+        "font",
+        "item_definition",
+        "lang",
+        "model",
+        "sounds",
+    ] {
+        generated_modules.push_str(&format!("pub(crate) mod {module};\n"));
+    }
+    std::fs::write("src/generated/mod.rs", generated_modules)?;
 
     macro_rules! generate_code {
         ($path:expr, $name:expr, $value_overrides:expr, $specialized_identifier_types:expr) => {

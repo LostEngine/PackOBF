@@ -1,9 +1,9 @@
+use crate::minecraft::builtin_files::AtlasType;
+use crate::minecraft::json::atlas::*;
 use crate::resource_pack::identifier::Identifier;
+use crate::utils::clean_json_numbers;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use crate::minecraft::builtin_files::AtlasType;
-use crate::utils::clean_json_numbers;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Atlas {
@@ -12,60 +12,8 @@ pub struct Atlas {
     #[serde(skip)]
     pub atlas_type: AtlasType,
 
-    pub sources: Vec<Source>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(tag = "type")]
-pub enum Source {
-    #[serde(rename = "directory", alias = "minecraft:directory")]
-    Directory { source: String, prefix: String },
-    #[serde(rename = "single", alias = "minecraft:single")]
-    Single {
-        resource: Identifier,
-        sprite: Option<Identifier>,
-    },
-    #[serde(rename = "filter", alias = "minecraft:filter")]
-    Filter {
-        pattern: FilterPattern,
-    },
-    #[serde(rename = "unstitch", alias = "minecraft:unstitch")]
-    Unstitch {
-        resource: Identifier,
-        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
-        divisor_x: f32,
-        #[serde(default = "crate::json::default_one", skip_serializing_if = "crate::json::is_one")]
-        divisor_y: f32,
-        regions: Vec<UnstitchRegion>,
-    },
-    #[serde(
-        rename = "paletted_permutations",
-        alias = "minecraft:paletted_permutations"
-    )]
-    PalettedPermutations {
-        textures: Vec<Identifier>,
-        palette_key: String,
-        permutations: HashMap<String, Identifier>,
-        #[serde(default = "crate::json::default_underscore", skip_serializing_if = "crate::json::is_underscore")]
-        separator: String,
-    },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct UnstitchRegion {
-    sprite: Identifier,
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct FilterPattern {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    namespace: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    path: Option<String>,
+    #[serde(flatten)]
+    pub json: java_assets_atlas_Atlas,
 }
 
 impl std::fmt::Display for Atlas {
@@ -105,16 +53,16 @@ impl Atlas {
     pub fn get_identifier(&self, texture_id: &Identifier) -> Option<Identifier> {
         let mut result: Option<Identifier> = None;
 
-        for source in self.sources.iter() {
+        for source in self.json.sources.iter() {
             match source {
-                Source::Single { resource, sprite } => {
+                java_assets_atlas_SpriteSource::Single { resource, sprite } => {
                     let name = sprite.as_ref().unwrap_or(resource);
                     if name.namespace == texture_id.namespace && name.path == texture_id.path {
                         result = Some(resource.clone());
                         break;
                     }
                 }
-                Source::Directory { source, prefix }
+                java_assets_atlas_SpriteSource::Directory { source, prefix }
                     if texture_id.path.starts_with(prefix) => {
                         let remaining_path = &texture_id.path[prefix.len()..];
                         let resource_path = format!("{source}{remaining_path}");
@@ -130,8 +78,8 @@ impl Atlas {
         }
 
         if result.is_some() {
-            for source in self.sources.iter() {
-                if let Source::Filter { pattern, .. } = source {
+            for source in self.json.sources.iter() {
+                if let java_assets_atlas_SpriteSource::Filter { pattern, .. } = source {
                     let ns_match = pattern.namespace.as_ref().is_none_or(|ns_regex| Regex::new(ns_regex)
                             .is_ok_and(|re| re.is_match(&texture_id.namespace)));
 
@@ -150,14 +98,14 @@ impl Atlas {
 
     pub fn get_sprites(&self, texture_id: &Identifier) -> Vec<Identifier> {
         let mut sprites = Vec::new();
-        for source in &self.sources {
+        for source in &self.json.sources {
             match source {
-                Source::Single { resource, sprite }
+                java_assets_atlas_SpriteSource::Single { resource, sprite }
                     if resource == texture_id =>
                 {
                     sprites.push(sprite.clone().unwrap_or_else(|| resource.clone()));
                 }
-                Source::Directory { source, prefix } => {
+                java_assets_atlas_SpriteSource::Directory { source, prefix } => {
                     if let Some(path) = texture_id.path.strip_prefix(source) {
                         sprites.push(Identifier::new(
                             texture_id.namespace.clone(),
@@ -165,10 +113,10 @@ impl Atlas {
                         ));
                     }
                 }
-                Source::Unstitch { resource, regions, .. } if resource == texture_id => {
+                java_assets_atlas_SpriteSource::Unstitch { resource, regions, .. } if resource == texture_id => {
                     sprites.extend(regions.iter().map(|region| region.sprite.clone()));
                 }
-                Source::PalettedPermutations {
+                java_assets_atlas_SpriteSource::PalettedPermutations {
                     textures,
                     permutations,
                     separator,
@@ -177,7 +125,7 @@ impl Atlas {
                     sprites.extend(permutations.keys().map(|permutation| {
                         Identifier::new(
                             texture_id.namespace.clone(),
-                            format!("{}{separator}{permutation}", texture_id.path),
+                            format!("{}{}{permutation}", texture_id.path, separator.clone().unwrap_or("".into())),
                         )
                     }));
                 }
@@ -186,8 +134,8 @@ impl Atlas {
         }
 
         sprites.retain(|sprite| {
-            !self.sources.iter().any(|source| match source {
-                Source::Filter { pattern } => {
+            !self.json.sources.iter().any(|source| match source {
+                java_assets_atlas_SpriteSource::Filter { pattern } => {
                     let ns_match = pattern.namespace.as_ref().is_none_or(|regex| {
                         Regex::new(regex).is_ok_and(|re| re.is_match(&sprite.namespace))
                     });
@@ -203,26 +151,26 @@ impl Atlas {
     }
 
     pub fn has_declared_sprite(&self, sprite_id: &Identifier) -> bool {
-        self.sources.iter().any(|source| match source {
-            Source::Single { resource, sprite } => {
+        self.json.sources.iter().any(|source| match source {
+            java_assets_atlas_SpriteSource::Single { resource, sprite } => {
                 sprite.as_ref().unwrap_or(resource) == sprite_id
             }
-            Source::Unstitch { regions, .. } => {
+            java_assets_atlas_SpriteSource::Unstitch { regions, .. } => {
                 regions.iter().any(|region| &region.sprite == sprite_id)
             }
-            Source::PalettedPermutations { textures, permutations, separator, .. } => {
+            java_assets_atlas_SpriteSource::PalettedPermutations { textures, permutations, separator, .. } => {
                 textures.iter().any(|texture| {
                     permutations.keys().any(|permutation| {
                         Identifier::new(
                             texture.namespace.clone(),
-                            format!("{}{separator}{permutation}", texture.path),
+                            format!("{}{}{permutation}", texture.path, separator.clone().unwrap_or("".into())),
                         ) == *sprite_id
                     })
                 })
             }
-            Source::Directory { .. } | Source::Filter { .. } => false,
-        }) && !self.sources.iter().any(|source| match source {
-            Source::Filter { pattern } => {
+            java_assets_atlas_SpriteSource::Directory { .. } | java_assets_atlas_SpriteSource::Filter { .. } => false,
+        }) && !self.json.sources.iter().any(|source| match source {
+            java_assets_atlas_SpriteSource::Filter { pattern } => {
                 let ns_match = pattern.namespace.as_ref().is_none_or(|regex| {
                     Regex::new(regex).is_ok_and(|re| re.is_match(&sprite_id.namespace))
                 });

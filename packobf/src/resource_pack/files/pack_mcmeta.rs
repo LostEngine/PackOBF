@@ -1,6 +1,10 @@
 use crate::utils::clean_json_numbers;
 use serde::{Deserialize, Serialize};
 
+/**
+Mcdoc2rust isn't used here as servers may use custom fields for custom tools and mods that we do not want to remove.
+*/
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PackMcmeta {
     #[serde(skip_serializing_if = "Option::is_none")]

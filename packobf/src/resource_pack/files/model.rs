@@ -1,7 +1,8 @@
-use crate::resource_pack::identifier::{Identifier, ModelId, TextureId};
+use crate::minecraft::json::model::java_assets_model_Model;
+use crate::resource_pack::identifier::Identifier;
 use crate::utils::clean_json_numbers;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::resource_pack::mapping::get_mappings;
 
 // models are referenced in `items` and `blockstates`
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -11,20 +12,8 @@ pub struct Model {
     #[serde(skip)]
     pub identifier: Identifier,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub parent: Option<ModelId>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ambientocclusion: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub display: Option<HashMap<String, Display>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub textures: Option<HashMap<String, TextureId>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub elements: Option<Vec<Element>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub overrides: Option<Vec<Override>>,
-    #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_1")]
-    pub gui_light: Option<String>,
+    #[serde(flatten)]
+    pub json: java_assets_model_Model,
 }
 
 impl Model {
@@ -42,13 +31,14 @@ impl Model {
     }
 
     pub fn path(&self) -> String {
+        let mapped = get_mappings().model_mappings.get(&self.identifier.to_string()).map_or_else(|| self.identifier.clone(), |id| Identifier::parse(id));
         let prefix = match self.overlay.as_str() {
             "" => "".to_string(),
             x => format!("{x}/"),
         };
         format!(
             "{}assets/{}/models/{}.json",
-            prefix, self.identifier.namespace, self.identifier.path
+            prefix, mapped.namespace, mapped.path
         )
     }
 }
@@ -63,88 +53,4 @@ impl std::fmt::Display for Model {
             serde_json::to_string(&val).map_err(|_| std::fmt::Error)?
         )
     }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Display {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rotation: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub translation: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub scale: Option<[f32; 3]>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Element {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub from: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub to: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub rotation: Option<Rotation>,
-
-    #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_2")]
-    pub shade: Option<bool>,
-
-    #[serde(skip_serializing_if = "crate::json::is_none_or_newer_than_26_2")]
-    pub shade_direction_override: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub light_emission: Option<u8>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub faces: Option<HashMap<String, Face>>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Rotation {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub x: Option<f32>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub y: Option<f32>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub z: Option<f32>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub axis: Option<String>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub angle: Option<f32>,
-
-    #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_1_21_11")]
-    pub origin: Option<[f32; 3]>,
-
-    #[serde(skip_serializing_if = "crate::json::is_none_or_older_than_1_21_11")]
-    pub rescale: Option<bool>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Face {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub uv: Option<[f32; 4]>,
-
-    pub texture: String, // an id to textures in the model
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cullface: Option<String>,
-
-    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_optional_i32", skip_serializing_if = "Option::is_none")]
-    pub tintindex: Option<i32>,
-
-    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_optional_i32", skip_serializing_if = "Option::is_none")]
-    pub rotation: Option<i32>,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Override {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub predicate: Option<serde_json::Value>,
-    pub model: ModelId,
 }

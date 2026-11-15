@@ -1,7 +1,7 @@
-use crate::resource_pack::identifier::{Identifier, ModelId};
+use crate::minecraft::json::block_state_definition::java_assets_block_state_definition_BlockStateDefinition;
+use crate::resource_pack::identifier::Identifier;
 use crate::utils::clean_json_numbers;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Blockstate {
@@ -10,62 +10,8 @@ pub struct Blockstate {
     #[serde(skip)]
     pub identifier: Identifier,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub variants: Option<HashMap<String, VariantValue>>,
-
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub multipart: Option<Vec<MultipartCase>>,
-}
-
-/// A variant can be a single model object or a list of weighted model objects
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum VariantValue {
-    Single(BlockModel),
-    Multiple(Vec<BlockModel>),
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BlockModel {
-    pub model: ModelId,
-
-    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero")]
-    pub x: i32,
-    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero")]
-    pub y: i32,
-    #[serde(default, deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_zero_or_older_than_1_21_11")]
-    pub z: i32,
-
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub uvlock: bool,
-
-    #[serde(default = "crate::json::default_weight", deserialize_with = "crate::json::deserializers::deserialize_i32", skip_serializing_if = "crate::json::is_default_weight")]
-    pub weight: i32,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct MultipartCase {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub when: Option<MultipartCondition>,
-    pub apply: VariantValue,
-}
-
-/// Logic for the 'when' block in multipart
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum MultipartCondition {
-    /// matches: {"OR": [{"state": "val"}, {"state": "val2"}]}
-    Or {
-        #[serde(rename = "OR")]
-        or: Vec<HashMap<String, String>>,
-    },
-    /// matches: {"AND": [{"state": "val"}, {"state": "val2"}]}
-    And {
-        #[serde(rename = "AND")]
-        and: Vec<HashMap<String, String>>,
-    },
-    /// matches: {"state": "value|value2"}
-    Single(HashMap<String, String>),
+    #[serde(flatten)]
+    pub json: java_assets_block_state_definition_BlockStateDefinition,
 }
 
 impl std::fmt::Display for Blockstate {

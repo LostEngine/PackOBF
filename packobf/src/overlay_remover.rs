@@ -1,185 +1,56 @@
-use rayon::ThreadPool;
-use std::collections::HashSet;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use tokio::sync::mpsc::UnboundedSender;
-
-use crate::resource_pack::files::pack_mcmeta::{FormatRange, OverlayEntry, PackVersion};
-use crate::resource_pack::pack::FrozenResourcePack;
+use crate::resource_pack::files::pack_mcmeta::{
+    FormatRange, OverlayEntry, PackMcmeta, PackVersion,
+};
 use crate::version::MinecraftVersion;
-use crate::{LogLevel, LogMessage};
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
-pub fn remove_overlays(
-    logger: &UnboundedSender<LogMessage>,
-    pack: &mut FrozenResourcePack,
-    minecraft_version: MinecraftVersion,
-    thread_pool: &ThreadPool
-) {
-    let entries = {
-        let Some(mut mcmeta) = pack.pack_mcmeta.take() else { return };
-        let entries = mcmeta
-            .overlays
-            .as_ref()
-            .and_then(|overlays| overlays.entries.clone())
-            .unwrap_or_default();
-
-        // Remove all overlays from the pack
-        mcmeta.overlays = None;
-
-        // Put the modified mcmeta back into the pack
-        pack.pack_mcmeta = Some(mcmeta);
-        entries
+pub fn resolve_overlays(entries: &mut Vec<(String, Vec<u8>)>, target_version: MinecraftVersion) {
+    let Some(overlays) = entries
+        .iter()
+        .rev()
+        .filter(|(path, _)| path == "pack.mcmeta")
+        .find_map(|(_, bytes)| serde_json::from_slice::<PackMcmeta>(bytes).ok())
+        .and_then(|mcmeta| mcmeta.overlays)
+        .and_then(|overlays| overlays.entries)
+        .filter(|overlays| !overlays.is_empty())
+    else {
+        return;
     };
 
-    if entries.is_empty() {
-        return;
-    }
-
-    let all: HashSet<String> = entries
-        .iter()
-        .map(|entry| entry.directory.clone())
-        .collect();
-    let active: Vec<String> = entries
-        .iter()
-        .filter(|entry| entry_matches(entry, minecraft_version as i32))
-        .map(|entry| entry.directory.clone())
-        .collect();
-
-    #[allow(unused_mut)]
-    let mut changed = AtomicUsize::new(0);
-    macro_rules! resolve_typed {
-        ($map:expr) => {
-            changed.fetch_add(
-                resolve_vec(
-                    $map,
-                    &all,
-                    &active,
-                    |value| value.overlay.clone(),
-                    |value| {
-                        value.overlay.clear();
-                        value.path()
-                    },
-                ),
-                Ordering::Relaxed
-            );
-        };
-    }
-
-    macro_rules! resolve_path {
-        ($map:expr) => {
-            changed.fetch_add(
-                resolve_vec(
-                    $map,
-                    &all,
-                    &active,
-                    |value| overlay_from_path(&value.path, &all),
-                    |value| {
-                        value.path = strip_overlay(&value.path).to_owned();
-                        value.path.clone()
-                    },
-                ),
-                Ordering::Relaxed
-            );
-        };
-    }
-
-    thread_pool.install(|| {
-        rayon::scope(|s| {
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.models);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.textures);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.blockstates);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.fonts);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.items);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.sounds);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.sound_definitions);
-            });
-            s.spawn(|_| {
-                resolve_typed!(&mut pack.atlases);
-            });
-            s.spawn(|_| {
-                resolve_path!(&mut pack.json_files);
-            });
-            s.spawn(|_| {
-                resolve_path!(&mut pack.shaders);
-            });
-            s.spawn(|_| {
-                resolve_path!(&mut pack.unknown_textures);
-            });
-            s.spawn(|_| {
-                resolve_path!(&mut pack.unknown_files);
-            });
-        });
-    });
-
-    let changed = changed.load(Ordering::Relaxed);
-    let _ = logger.send(LogMessage {
-        level: LogLevel::Info,
-        message: format!(
-            "Removed resource pack overlays for pack format {} ({changed} files changed)",
-            minecraft_version as i32
-        ),
-    });
-}
-
-fn resolve_vec<T: Clone>(
-    vec: &mut Vec<(String, T)>,
-    declared: &HashSet<String>,
-    active: &[String],
-    overlay: impl Fn(&T) -> String,
-    promote: impl Fn(&mut T) -> String,
-) -> usize {
-    let entries: Vec<(String, T, String)> = vec
-        .iter()
-        .map(|(key, value)| {
-            let overlay_dir = overlay(value);
-            (key.clone(), value.clone(), overlay_dir)
-        })
-        .filter(|(_, _, directory)| declared.contains(directory))
-        .collect();
-
-    if entries.is_empty() {
-        return 0;
-    }
-
-    let keys_to_remove: HashSet<String> = entries.iter().map(|(key, _, _)| key.clone()).collect();
-
-    vec.retain(|(key, _)| !keys_to_remove.contains(key));
-
-    for directory in active {
-        for (_, value, entry_overlay) in &entries {
-            if entry_overlay == directory {
-                let mut promoted_val = value.clone();
-                let path = promote(&mut promoted_val);
-                vec.push((path, promoted_val));
-            }
+    let mut priorities = HashMap::new();
+    for (index, overlay) in overlays.iter().enumerate() {
+        let priority = priorities.entry(overlay.directory.as_str()).or_insert(None);
+        if entry_matches(overlay, target_version as i32) {
+            *priority = Some(index + 1);
         }
     }
 
-    entries.len()
-}
+    let mut resolved: HashMap<String, (usize, Vec<u8>)> = HashMap::with_capacity(entries.len());
+    for (path, bytes) in entries.drain(..) {
+        let overlay = path.match_indices('/').rev().find_map(|(index, _)| {
+            priorities
+                .get(&path[..index])
+                .map(|priority| (&path[index + 1..], *priority))
+        });
+        let (path, priority) = match overlay {
+            Some(("pack.mcmeta", _) | (_, None)) => continue,
+            Some((path, Some(priority))) => (path.to_owned(), priority),
+            None => (path, 0),
+        };
 
-fn overlay_from_path(path: &str, declared: &HashSet<String>) -> String {
-    declared
-        .iter()
-        .find(|directory| path.starts_with(&format!("{directory}/")))
-        .cloned()
-        .unwrap_or_default()
-}
+        match resolved.entry(path) {
+            Entry::Occupied(mut entry) if priority >= entry.get().0 => {
+                entry.insert((priority, bytes));
+            }
+            Entry::Vacant(entry) => {
+                entry.insert((priority, bytes));
+            }
+            Entry::Occupied(_) => {}
+        }
+    }
 
-fn strip_overlay(path: &str) -> &str {
-    path.split_once('/').map_or(path, |(_, rest)| rest)
+    entries.extend(resolved.into_iter().map(|(path, (_, bytes))| (path, bytes)));
 }
 
 const fn version(version: &PackVersion) -> (i32, i32) {

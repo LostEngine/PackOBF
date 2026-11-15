@@ -93,3 +93,15 @@ resource packs and online resources such as [ImHex](https://github.com/werwolv/i
 ## How to use the library (for developers)
 
 See [How to use the library (for developers)](docs/usage/HOW_TO_USE_LIBRARY_DEVS.md)
+
+
+## Building from source
+Install Rust on using https://rustup.rs/.
+
+### CLI
+```shell
+cargo build -r -p packobf_cli
+```
+
+### GUI
+See the [desktop build instructions](packobf_gui/README.md) for Linux, macOS, and Windows.

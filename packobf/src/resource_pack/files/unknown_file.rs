@@ -1,10 +1,10 @@
 #[derive(Clone, Debug)]
-pub struct ResourcePackFile {
+pub struct UnknownFile {
     pub path: String,
     pub bytes: Vec<u8>,
 }
 
-impl ResourcePackFile {
+impl UnknownFile {
     pub fn new(path: impl Into<String>, bytes: Vec<u8>) -> Self {
         Self {
             path: path.into(),

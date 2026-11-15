@@ -1,5 +1,7 @@
 use crate::minecraft::builtin_files;
+use crate::resource_pack::identifier::Identifier;
 use arc_swap::ArcSwap;
+use crossbeam::queue::SegQueue;
 use dashmap::DashMap;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -18,9 +20,24 @@ pub static GLOBAL_MAPPING: LazyLock<ArcSwap<Mapping>> =
 #[derive(Clone, Debug, Default)]
 pub struct Mapping {
     pub model_mappings: HashMap<String, String>,
-    pub texture_mappings: HashMap<String, String>,
+    pub texture_mappings: TextureMappings,
     pub sound_mappings: HashMap<String, String>,
     pub overlay_mappings: HashMap<String, String>,
+    pub font_textures: Vec<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct TextureMappings {
+    /// Mappings for where the textures will be relocated to
+    pub assets_mapping: HashMap<Identifier, Identifier>,
+    /// Mappings for references to textures
+    pub refenrence_mappings: HashMap<String, String>,
+}
+
+impl TextureMappings {
+    pub(crate) fn asset_identifier<'a>(&'a self, identifier: &'a Identifier) -> &'a Identifier {
+        self.assets_mapping.get(identifier).unwrap_or(identifier)
+    }
 }
 
 impl Mapping {
@@ -32,7 +49,7 @@ impl Mapping {
                 }
             }
             IdCategory::Texture => {
-                if let Some(mapped) = self.texture_mappings.get(id) {
+                if let Some(mapped) = self.texture_mappings.refenrence_mappings.get(id) {
                     return mapped.clone();
                 }
             }
@@ -59,16 +76,17 @@ pub static GLOBAL_ID_USAGE_COUNTER: LazyLock<ArcSwap<IdUsageCounter>> =
 
 #[derive(Debug, Default)]
 pub struct IdUsageCounter {
-    pub model_counter: DashMap<String, AtomicUsize>,
-    pub texture_counter: DashMap<String, AtomicUsize>,
-    pub sound_counter: DashMap<String, AtomicUsize>,
+    pub model_counter: DashMap<Identifier, AtomicUsize>,
+    pub texture_counter: DashMap<Identifier, AtomicUsize>,
+    pub sound_counter: DashMap<Identifier, AtomicUsize>,
+    pub font_textures: SegQueue<String>,
 }
 
 impl IdUsageCounter {
-    pub fn increment_counter(&self, id: String, category: IdCategory) {
+    pub fn increment_counter(&self, id: Identifier, category: IdCategory) {
         match category {
             IdCategory::Model => {
-                if !builtin_files::is_in_models(id.as_str()) {
+                if !builtin_files::is_in_models(&id.to_string()) {
                     self.model_counter
                         .entry(id)
                         .or_insert_with(|| AtomicUsize::new(0))
@@ -76,7 +94,7 @@ impl IdUsageCounter {
                 }
             }
             IdCategory::Texture => {
-                if !builtin_files::is_in_textures(id.as_str()) {
+                if !builtin_files::is_in_textures(&id.to_string()) {
                     self.texture_counter
                         .entry(id)
                         .or_insert_with(|| AtomicUsize::new(0))
@@ -84,7 +102,7 @@ impl IdUsageCounter {
                 }
             }
             IdCategory::Sound => {
-                if !builtin_files::is_in_sounds(id.as_str()) {
+                if !builtin_files::is_in_sounds(&id.to_string()) {
                     self.sound_counter
                         .entry(id)
                         .or_insert_with(|| AtomicUsize::new(0))
@@ -94,7 +112,7 @@ impl IdUsageCounter {
         }
     }
 
-    pub fn get_usage_count(&self, id: &str, category: IdCategory) -> usize {
+    pub fn get_usage_count(&self, id: &Identifier, category: IdCategory) -> usize {
         match category {
             IdCategory::Model => self
                 .model_counter

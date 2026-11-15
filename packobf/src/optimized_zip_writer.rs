@@ -131,8 +131,8 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
         hash: &[u8; 32],
         cache: &Option<Cache>,
     ) -> Result<Vec<u8>, Error> {
-        if let Some(cache) = cache {
-            if let Some(bytes) = cache
+        if let Some(cache) = cache
+            && let Some(bytes) = cache
                 .with_item(hash, ItemType::Generic, |it| {
                     (it.compression >= options.compression as u8)
                         .then(|| it.data.clone())
@@ -141,7 +141,6 @@ impl<W: Write + Seek> OptimizedZipWriter<W> {
             {
                 return Ok(bytes);
             }
-        }
         let input_size = data.len();
         Ok(match options.compression {
             Compression::Fast => {

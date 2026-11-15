@@ -1,7 +1,7 @@
-use crate::resource_pack::mapping::{get_id_usage_counter, get_mappings, IdCategory};
+use crate::resource_pack::mapping::{IdCategory, get_id_usage_counter, get_mappings};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Hash, Eq)]
 pub struct Identifier {
     pub namespace: String,
     pub path: String,
@@ -64,12 +64,15 @@ pub struct ModelId(pub Identifier);
 pub struct SoundId(pub Identifier);
 
 macro_rules! impl_id_wrapper {
-    ($name:ident, $category:expr $(, $suffix:expr)?) => {
+    ($name:ident, $category:expr) => {
+        impl_id_wrapper!($name, $category, |id: &Identifier| {
+            get_mappings().apply_mapping(&id.to_string(), $category)
+        });
+    };
+    ($name:ident, $category:expr, $map:expr $(, suffix = $suffix:expr)? $(, on_deserialize = $on_deserialize:expr)?) => {
         impl std::fmt::Display for $name {
             fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                let mapping = get_mappings();
-                let id_str = self.0.to_string();
-                let mapped = mapping.apply_mapping(&id_str, $category);
+                let mapped = $map(&self.0);
 
                 write!(f, "{}{}", mapped, concat!($($suffix)?))
             }
@@ -101,8 +104,11 @@ macro_rules! impl_id_wrapper {
                     s
                 };
                 let id = Identifier::parse(&path);
+                $(
+                    $on_deserialize(&id);
+                )?
                 let counter = get_id_usage_counter();
-                counter.increment_counter(id.to_string(), $category);
+                counter.increment_counter(id.clone(), $category);
 
                 Ok(Self(id))
             }
@@ -111,6 +117,17 @@ macro_rules! impl_id_wrapper {
 }
 
 impl_id_wrapper!(TextureId, IdCategory::Texture);
-impl_id_wrapper!(TextureIdWithExt, IdCategory::Texture, ".png");
+impl_id_wrapper!(
+    TextureIdWithExt,
+    IdCategory::Texture,
+    |id: &Identifier| get_mappings()
+        .texture_mappings
+        .asset_identifier(id)
+        .to_string(),
+    suffix = ".png",
+    on_deserialize = |id: &Identifier| {
+        get_id_usage_counter().font_textures.push(id.to_string());
+    }
+);
 impl_id_wrapper!(ModelId, IdCategory::Model);
 impl_id_wrapper!(SoundId, IdCategory::Sound);

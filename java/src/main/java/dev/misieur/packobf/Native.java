@@ -14,9 +14,10 @@ public class Native {
 
     static class Options {
 
-        Options(int compression, int shaderCompression, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles, int numThreads, int targetVersion) {
+        Options(int compression, int shaderCompression, int soundQuality, boolean renameFiles, boolean blockUnzipping, boolean corruptPngFiles, int numThreads, int targetVersion) {
             this.compression = compression;
             this.shaderCompression = shaderCompression;
+            this.soundQuality = soundQuality;
             this.renameFiles = renameFiles;
             this.blockUnzipping = blockUnzipping;
             this.corruptPngFiles = corruptPngFiles;
@@ -26,6 +27,7 @@ public class Native {
 
         int compression;
         int shaderCompression;
+        int soundQuality;
         boolean renameFiles;
         boolean blockUnzipping;
         boolean corruptPngFiles;

@@ -1,15 +1,16 @@
+use crate::LogMessage;
 use crate::cache::Cache;
 use crate::options::Options;
 use crate::resource_pack::files::texture::Texture;
 use crate::resource_pack::identifier::Identifier;
-use crate::LogMessage;
+use crate::resource_pack::mapping::get_mappings;
 
 // textures are referenced in `models`, `items` and `font`
 #[derive(Clone, Debug)]
 pub struct AssetTexture {
     pub overlay: String,
     pub identifier: Identifier,
-    pub texture: Texture
+    pub texture: Texture,
 }
 
 impl AssetTexture {
@@ -39,13 +40,19 @@ impl AssetTexture {
     }
 
     pub fn path(&self) -> String {
-        let prefix = match self.overlay.as_str() {
+        Self::path_for(&self.overlay, &self.identifier)
+    }
+
+    pub(crate) fn path_for(overlay: &str, identifier: &Identifier) -> String {
+        let mappings = get_mappings();
+        let mapped = mappings.texture_mappings.asset_identifier(identifier);
+        let prefix = match overlay {
             "" => "".to_string(),
             x => format!("{x}/"),
         };
         format!(
             "{prefix}assets/{}/textures/{}.png",
-            self.identifier.namespace, self.identifier.path
+            mapped.namespace, mapped.path
         )
     }
 }

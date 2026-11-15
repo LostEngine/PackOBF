@@ -1,345 +1,285 @@
 use crate::minecraft::builtin_files;
 use crate::minecraft::builtin_files::AtlasType;
-use crate::resource_pack::files::atlas::{Atlas, Source};
-use crate::resource_pack::files::font::FontProvider;
+use crate::minecraft::json::atlas::{java_assets_atlas_Atlas, java_assets_atlas_SpriteSource};
+use crate::resource_pack::files::atlas::Atlas;
 use crate::resource_pack::identifier::Identifier;
-use crate::resource_pack::mapping::{self, Mapping};
-use crate::resource_pack::pack::FrozenResourcePack;
+use crate::resource_pack::mapping::{self, Mapping, TextureMappings};
+use crate::resource_pack::pack::{Asset, ResourcePack};
 use crate::{profile_scope, LogLevel, LogMessage};
+use itertools::Itertools;
+use rayon::ThreadPool;
 use std::collections::HashMap;
-use std::mem::take;
 use tokio::sync::mpsc::UnboundedSender;
+
+
+// Source is the folder where the assets are located, and Prefix is the prefix that will be added to
+// the identifier. Source and Prefix are intentionally different to confuse people trying to extract
+// resources from the pack.
+const BLOCKS_SOURCE: &str = ".";
+const BLOCKS_SOURCE_PATH: &str = "./";
+const BLOCKS_PREFIX: &str = "_/";
+
+const ITEMS_SOURCE: &str = "_";
+const ITEMS_SOURCE_PATH: &str = "_/";
+const ITEMS_PREFIX: &str = "./";
+
+macro_rules! generate_mappings {
+    ($asset:path, $category:expr, $pack:expr, $id_counter:expr, $mapping:expr, $is_in_vanilla:expr) => {
+        let mut ids: Vec<&Identifier> = $pack.assets
+            .iter()
+            .filter_map(|asset| {
+                if let $asset(asset) = asset {
+                    let id = &asset.identifier;
+                    if id.namespace != "minecraft" || !$is_in_vanilla(&id.to_string()) {
+                        Some(id)
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+
+        ids.sort_by(|a, b| {
+            let a_usage = $id_counter.get_usage_count(&a, $category);
+            let b_usage = $id_counter.get_usage_count(&b, $category);
+
+            // Higher usage first
+            b_usage
+                .cmp(&a_usage)
+                // Stable deterministic fallback so the same resource pack is generated each time
+                .then_with(|| a.to_string().cmp(&b.to_string()))
+        });
+        let mut count = 0;
+        for identifier in ids {
+            let id_string = identifier.to_string();
+            if !$mapping.contains_key(&id_string) {
+                let new_identifier = format!("_:{}", generate_short_name(count, true));
+                $mapping.insert(id_string, new_identifier);
+                count += 1;
+            }
+        }
+    };
+}
 
 pub fn rename_files(
     logger: &UnboundedSender<LogMessage>,
-    pack: &mut FrozenResourcePack,
+    pack: &mut ResourcePack,
     mapping: &mut Mapping,
+    thread_pool: &ThreadPool,
 ) {
     profile_scope!(std::any::type_name_of_val(&rename_files));
     let id_counter = &mapping::get_id_usage_counter();
     rename_overlays(pack, &mut mapping.overlay_mappings);
-    rename_models(pack, &mut mapping.model_mappings, id_counter);
-    rename_textures(logger, pack, &mut mapping.texture_mappings, id_counter);
-    rename_sounds(pack, &mut mapping.sound_mappings, id_counter);
+
+    thread_pool.install(|| {
+        rayon::scope(|s| {
+            s.spawn(|_| {
+                profile_scope!("generate_sound_mappings");
+                generate_mappings!(Asset::Sound, mapping::IdCategory::Sound, &pack, id_counter, &mut mapping.sound_mappings, builtin_files::is_in_sounds);
+            });
+            s.spawn(|_| {
+                profile_scope!("generate_model_mappings");
+                generate_mappings!(Asset::Model, mapping::IdCategory::Model, &pack, id_counter, &mut mapping.model_mappings, builtin_files::is_in_models);
+            });
+            generate_texture_mappings(logger, pack, id_counter, &mut mapping.texture_mappings);
+        });
+    });
+    rebuild_atlases(pack, &mapping.texture_mappings);
 }
 
-fn rename_overlays(pack: &mut FrozenResourcePack, mapping: &mut HashMap<String, String>) {
+fn rename_overlays(pack: &mut ResourcePack, mapping: &mut HashMap<String, String>) {
     profile_scope!(std::any::type_name_of_val(&rename_overlays));
-    if let Some(mut mcmeta) = pack.pack_mcmeta.take() {
-
-        if let Some(overlay) = mcmeta.overlays.as_mut() {
-            if let Some(entries) = overlay.entries.as_mut() {
-                for (count, entry) in entries.iter_mut().enumerate() {
-                    let new_name = generate_short_name(count, false);
-                    mapping.insert(entry.directory.clone(), new_name.clone());
-                    entry.directory = new_name;
-                }
-            }
+    if let Some(mcmeta) = pack.pack_mcmeta.as_mut() &&
+        let Some(overlay) = mcmeta.overlays.as_mut() &&
+        let Some(entries) = overlay.entries.as_mut() {
+        for (count, entry) in entries.iter_mut().enumerate() {
+            let new_name = generate_short_name(count, false);
+            mapping.insert(entry.directory.clone(), new_name.clone());
+            entry.directory = new_name;
         }
-        pack.pack_mcmeta = Some(mcmeta);
     }
 }
 
-fn rename_sounds(
-    pack: &mut FrozenResourcePack,
-    mapping: &mut HashMap<String, String>,
-    id_counter: &mapping::IdUsageCounter,
-) {
-    profile_scope!(std::any::type_name_of_val(&rename_sounds));
-    let mut sounds = take(&mut pack.sounds);
-
-    sounds.retain(|(_, x)| {
-        !(x.identifier.namespace == "minecraft"
-            && builtin_files::is_in_sounds(x.identifier.to_string().as_str()))
-    });
-
-    sounds.sort_by(|(_, a), (_, b)| {
-        let a_id = a.identifier.to_string();
-        let b_id = b.identifier.to_string();
-
-        let a_usage = id_counter.get_usage_count(&a_id, mapping::IdCategory::Sound);
-        let b_usage = id_counter.get_usage_count(&b_id, mapping::IdCategory::Sound);
-
-        // Higher usage first
-        b_usage
-            .cmp(&a_usage)
-            // Stable deterministic fallback so the same resource pack is generated each time
-            .then_with(|| a_id.cmp(&b_id))
-    });
-
-    let mut updated_sounds = Vec::with_capacity(sounds.len());
-    for (count, (_key, mut sound)) in sounds.into_iter().enumerate() {
-        let identifier = sound.identifier.to_string();
-        if let Some(mapped) = mapping.get(&identifier) {
-            sound.identifier = Identifier::parse(mapped);
-            let new_path = sound.path();
-            updated_sounds.push((new_path, sound));
-        } else {
-            let new_identifier = Identifier::new("_", generate_short_name(count, true));
-            mapping.insert(identifier, new_identifier.to_string());
-            sound.identifier = new_identifier;
-            let new_path = sound.path();
-            updated_sounds.push((new_path, sound));
-        }
-    }
-
-    updated_sounds.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    pack.sounds = updated_sounds;
-}
-
-fn rename_textures(
+fn generate_texture_mappings(
     logger: &UnboundedSender<LogMessage>,
-    pack: &mut FrozenResourcePack,
-    mapping: &mut HashMap<String, String>,
+    pack: &ResourcePack,
     id_counter: &mapping::IdUsageCounter,
+    mappings: &mut TextureMappings,
 ) {
-    profile_scope!(std::any::type_name_of_val(&rename_textures));
-    let mut textures = take(&mut pack.textures);
+    profile_scope!(std::any::type_name_of_val(&generate_texture_mappings));
+    let mut textures: Vec<&Identifier> = pack.assets
+        .iter()
+        .filter_map(|asset| {
+            if let Asset::AssetTexture(texture) = asset {
+                let id = &texture.identifier;
+                if id.namespace != "minecraft" ||
+                    !builtin_files::is_in_textures(id.to_string().as_str()) {
+                    Some(id)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>();
 
-    textures.retain(|(_, x)| {
-        !(x.identifier.namespace == "minecraft"
-            && builtin_files::is_in_textures(x.identifier.to_string().as_str()))
-    });
-
-    textures.sort_by(|(_, a), (_, b)| {
-        let a_id = a.identifier.to_string();
-        let b_id = b.identifier.to_string();
-
-        let a_usage = texture_usage(pack, &a.identifier, &a_id, id_counter);
-        let b_usage = texture_usage(pack, &b.identifier, &b_id, id_counter);
+    textures.sort_by(|a, b| {
+        let a_usage = texture_usage(pack, a, id_counter);
+        let b_usage = texture_usage(pack, b, id_counter);
 
         // Higher usage first
         b_usage
             .cmp(&a_usage)
             // Stable deterministic fallback so the same resource pack is generated each time
-            .then_with(|| a_id.cmp(&b_id))
+            .then_with(|| a.to_string().cmp(&b.to_string()))
     });
 
     let mut per_folder_count: HashMap<String, usize> = HashMap::new();
-    let font_textures = get_font_textures(pack);
+    let font_textures: Vec<String> = std::iter::from_fn(|| id_counter.font_textures.pop()).collect();
 
-    let mut updated_textures = Vec::with_capacity(textures.len());
-    for (key, mut texture) in textures {
-        let identifier = texture.identifier.to_string();
+    for texture in textures {
+        let texture_id = texture.to_string();
+        let mut in_items = false;
+        let mut in_blocks = false;
+        let in_font = font_textures.contains(&texture_id);
+        let mut aliases = Vec::new();
 
-        if let Some(mapped) = mapping.get(&identifier) {
-            texture.identifier = Identifier::parse(mapped);
-            let new_path = texture.path();
-
-            let old_mcmeta_key = format!("{key}.mcmeta");
-            if let Some(idx) = pack.json_files.iter().position(|(k, _)| k == &old_mcmeta_key) {
-                let (_, mcmeta) = pack.json_files.remove(idx);
-                pack.json_files.push((format!("{new_path}.mcmeta"), mcmeta));
-            }
-
-            updated_textures.push((new_path, texture));
-        } else {
-            let mut in_items = false;
-            let mut in_blocks = false;
-            let in_font = font_textures.contains(&texture.identifier.to_string());
-            let mut aliases = Vec::new();
-
-            for (_, atlas) in &pack.atlases {
-                let sprites = atlas.get_sprites(&texture.identifier);
+        for asset in &pack.assets {
+            if let Asset::Atlas(asset) = asset {
+                let sprites = asset.get_sprites(texture);
                 if sprites.is_empty() {
                     continue;
                 }
-                match atlas.atlas_type {
+                match asset.atlas_type {
                     AtlasType::Blocks => in_blocks = true,
                     AtlasType::Items => in_items = true,
-                    _ => {}
+                    _ => continue,
                 }
                 aliases.extend(sprites);
             }
-            match builtin_files::get_atlas(texture.identifier.path.as_str()) {
-                Some(AtlasType::Blocks) => {
-                    in_blocks = true;
-                }
-                Some(AtlasType::Items) => {
-                    in_items = true;
-                }
-                _ => {}
-            }
-            let prefix = if in_blocks {
-                if in_items {
-                    let _ = logger.send(LogMessage {
-                        level: LogLevel::Warning,
-                        message: format!(
-                            "'{}' is both in blocks and items atlas. Using blocks atlas.",
-                            texture.path()
-                        ),
-                    });
-                }
-                "b/"
-            } else if in_items {
-                "i/"
-            } else if in_font {
-                ""
-            } else {
-                // If skipping, retain the item unchanged
-                updated_textures.push((key, texture));
-                continue;
-            };
-            let count = per_folder_count.entry(prefix.to_string()).or_insert(0);
-            let path = prefix.to_owned() + generate_short_name(*count, true).as_str();
-            let new_identifier = Identifier::new("_", path);
-            mapping.insert(identifier, new_identifier.to_string());
-            for alias in aliases {
-                mapping.insert(alias.to_string(), new_identifier.to_string());
-            }
-            texture.identifier = new_identifier;
-            let new_path = texture.path();
-
-            // Handle .mcmeta relocation in vector-based json_files
-            let old_mcmeta_key = format!("{key}.mcmeta");
-            if let Some(idx) = pack.json_files.iter().position(|(k, _)| k == &old_mcmeta_key) {
-                let (_, mcmeta) = pack.json_files.remove(idx);
-                pack.json_files.push((format!("{new_path}.mcmeta"), mcmeta));
-            }
-
-            updated_textures.push((new_path, texture));
-            *count += 1;
         }
-    }
-
-    updated_textures.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    pack.textures = updated_textures;
-
-    pack.json_files.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-
-    rebuild_atlas(pack);
-}
-
-fn get_font_textures(pack: &FrozenResourcePack) -> Vec<String> {
-    let mut font_textures = Vec::new();
-    for (_, font) in pack.fonts.iter() {
-        for provider in font.providers.iter() {
-            if let FontProvider::Bitmap { file, .. } = provider {
-                let id = if file.0.namespace == "minecraft" {
-                    file.0.path.to_string()
-                } else {
-                    format!("{}:{}", file.0.namespace, file.0.path)
-                };
-                font_textures.push(id);
+        match builtin_files::get_atlas(texture.path.as_str()) {
+            Some(AtlasType::Blocks) => {
+                in_blocks = true;
             }
-        }
-    }
-    font_textures
-}
-
-fn texture_usage(
-    pack: &FrozenResourcePack,
-    identifier: &Identifier,
-    id: &str,
-    counter: &mapping::IdUsageCounter,
-) -> usize {
-    let direct = counter.get_usage_count(id, mapping::IdCategory::Texture);
-    pack.atlases
-        .iter()
-        .flat_map(|(_, atlas)| atlas.get_sprites(identifier))
-        .map(|sprite| counter.get_usage_count(&sprite.to_string(), mapping::IdCategory::Texture))
-        .fold(direct, usize::saturating_add)
-}
-
-fn rebuild_atlas(pack: &mut FrozenResourcePack) {
-    pack.atlases.retain(|(_, atlas)| atlas.overlay.is_empty());
-    let mut item_atlas_exists = false;
-    let mut block_atlas_exists = false;
-    for (_, atlas) in pack.atlases.iter_mut() {
-        match atlas.atlas_type {
-            AtlasType::Blocks => {
-                if atlas.overlay.is_empty() {
-                    block_atlas_exists = true;
-                }
-                atlas.sources.retain(|source| !matches!(source, Source::Directory { .. }));
-                atlas.sources.push(Source::Directory {
-                    source: "b".to_string(),
-                    prefix: "b/".to_string(),
-                });
-            }
-            AtlasType::Items => {
-                if atlas.overlay.is_empty() {
-                    item_atlas_exists = true;
-                }
-                atlas.sources.retain(|source| !matches!(source, Source::Directory { .. }));
-                atlas.sources.push(Source::Directory {
-                    source: "i".to_string(),
-                    prefix: "i/".to_string(),
-                });
+            Some(AtlasType::Items) => {
+                in_items = true;
             }
             _ => {}
         }
-    }
-    if !block_atlas_exists {
-        let atlas = Atlas {
-            overlay: "".to_string(),
-            sources: vec![Source::Directory {
-                source: "b".to_string(),
-                prefix: "b/".to_string(),
-            }],
-            atlas_type: AtlasType::Blocks,
+        let (asset_prefix, reference_prefix) = if in_blocks {
+            if in_items {
+                let _ = logger.send(LogMessage {
+                    level: LogLevel::Warning,
+                    message: format!(
+                        "'{}' is both in blocks and items atlas. Using blocks atlas.",
+                        texture_id
+                    ),
+                });
+            }
+            (BLOCKS_SOURCE_PATH, BLOCKS_PREFIX)
+        } else if in_items {
+            (ITEMS_SOURCE_PATH, ITEMS_PREFIX)
+        } else if in_font {
+            ("", "")
+        } else {
+            continue;
         };
-        pack.atlases.push((atlas.path(), atlas));
-    }
-    if !item_atlas_exists {
-        let atlas = Atlas {
-            overlay: "".to_string(),
-            sources: vec![Source::Directory {
-                source: "i".to_string(),
-                prefix: "i/".to_string(),
-            }],
-            atlas_type: AtlasType::Items,
-        };
-        pack.atlases.push((atlas.path(), atlas));
+        let count = per_folder_count.entry(asset_prefix.to_string()).or_insert(0);
+
+        let name = generate_short_name(*count, true);
+        mappings.assets_mapping.insert(texture.clone(), Identifier::new("_", format!("{asset_prefix}{name}")));
+
+        mappings.refenrence_mappings.insert(texture_id, format!("_:{reference_prefix}{name}"));
+        for alias in aliases {
+            mappings.refenrence_mappings.insert(alias.to_string(), format!("_:{reference_prefix}{name}"));
+        }
+        *count += 1;
     }
 }
 
-fn rename_models(
-    pack: &mut FrozenResourcePack,
-    mapping: &mut HashMap<String, String>,
-    id_counter: &mapping::IdUsageCounter,
-) {
-    profile_scope!(std::any::type_name_of_val(&rename_models));
-    let mut models = take(&mut pack.models);
+fn texture_usage(
+    pack: &ResourcePack,
+    id: &Identifier,
+    counter: &mapping::IdUsageCounter,
+) -> usize {
+    profile_scope!(std::any::type_name_of_val(&texture_usage));
+    let direct = counter.get_usage_count(id, mapping::IdCategory::Texture);
+    pack.assets
+        .iter()
+        .filter_map(|asset| {
+            if let Asset::Atlas(atlas) = asset {
+                Some(atlas)
+            } else {
+                None
+            }
+        })
+        .flat_map(|atlas| atlas.get_sprites(id))
+        .unique()
+        .map(|sprite| counter.get_usage_count(&sprite, mapping::IdCategory::Texture))
+        .fold(direct, usize::saturating_add)
+}
 
-    models.retain(|(_, x)| {
-        !(x.identifier.namespace == "minecraft"
-            && builtin_files::is_in_models(x.identifier.to_string().as_str()))
-    });
+fn rebuild_atlases(pack: &mut ResourcePack, mappings: &TextureMappings) {
+    profile_scope!(std::any::type_name_of_val(&rebuild_atlases));
+    for (atlas_type, source, asset_prefix, sprite_prefix) in [
+        (AtlasType::Blocks, BLOCKS_SOURCE, BLOCKS_SOURCE_PATH, BLOCKS_PREFIX),
+        (AtlasType::Items, ITEMS_SOURCE, ITEMS_SOURCE_PATH, ITEMS_PREFIX),
+    ] {
+        let directory = || java_assets_atlas_SpriteSource::Directory {
+            source: source.to_string(),
+            prefix: sprite_prefix.to_string(),
+        };
+        let mut base_exists = false;
+        for asset in &mut pack.assets {
+            let Asset::Atlas(atlas) = asset else {
+                continue;
+            };
+            if atlas.atlas_type != atlas_type {
+                continue;
+            }
+            base_exists |= atlas.overlay.is_empty();
+            atlas.json.sources.retain_mut(|source| match source {
+                java_assets_atlas_SpriteSource::Directory { .. } => false,
+                java_assets_atlas_SpriteSource::Single { resource, sprite } => {
+                    let Some(relocated) = mappings.assets_mapping.get(resource) else {
+                        return true;
+                    };
+                    let original_sprite = sprite.as_ref().unwrap_or(resource);
+                    let mapped_sprite = mappings
+                        .refenrence_mappings
+                        .get(&original_sprite.to_string())
+                        .map(|id| Identifier::parse(id));
+                    if let Some(name) = relocated.path.strip_prefix(asset_prefix)
+                        && let Some(mapped_sprite) = &mapped_sprite
+                        && mapped_sprite.namespace == relocated.namespace
+                        && mapped_sprite.path == format!("{sprite_prefix}{name}")
+                    {
+                        return false;
+                    }
 
-    models.sort_by(|(_, a), (_, b)| {
-        let a_id = a.identifier.to_string();
-        let b_id = b.identifier.to_string();
+                    *sprite = Some(mapped_sprite.unwrap_or_else(|| original_sprite.clone()));
+                    *resource = relocated.clone();
+                    true
+                }
+                _ => true,
+            });
+            atlas.json.sources.push(directory());
+        }
 
-        let a_usage = id_counter.get_usage_count(&a_id, mapping::IdCategory::Model);
-        let b_usage = id_counter.get_usage_count(&b_id, mapping::IdCategory::Model);
-
-        // Higher usage first
-        b_usage
-            .cmp(&a_usage)
-            // Stable deterministic fallback so the same resource pack is generated each time
-            .then_with(|| a_id.cmp(&b_id))
-    });
-
-    let mut updated_models = Vec::with_capacity(models.len());
-
-    for (count, (_key, mut model)) in models.into_iter().enumerate() {
-        let identifier = model.identifier.to_string();
-        if let Some(mapped) = mapping.get(&identifier) {
-            model.identifier = Identifier::parse(mapped);
-            let new_path = model.path();
-            updated_models.push((new_path, model));
-        } else {
-            let new_identifier = Identifier::new("_", generate_short_name(count, true));
-            mapping.insert(identifier, new_identifier.to_string());
-            model.identifier = new_identifier;
-            let new_path = model.path();
-            updated_models.push((new_path, model));
+        if !base_exists {
+            pack.assets.push(Asset::Atlas(Atlas {
+                overlay: String::new(),
+                json: java_assets_atlas_Atlas {
+                    sources: vec![directory()],
+                },
+                atlas_type,
+            }));
         }
     }
-
-    updated_models.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    pack.models = updated_models;
 }
 
 fn generate_short_name(mut id: usize, dots: bool) -> String {
@@ -358,4 +298,16 @@ fn generate_short_name(mut id: usize, dots: bool) -> String {
         }
     }
     name
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_generate_short_name() {
+        assert_eq!(generate_short_name(0, false), "a");
+        assert_eq!(generate_short_name(38, true), ".");
+        assert_eq!(generate_short_name(38, false), "ab");
+    }
 }

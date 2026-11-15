@@ -1,33 +1,30 @@
-#![windows_subsystem = "windows"]
+#[cfg(target_os = "linux")]
+#[path = "../platforms/linux/mod.rs"]
+mod linux;
 
-pub mod cxxqt_object;
+#[cfg(target_os = "linux")]
+fn main() -> gtk::glib::ExitCode {
+    linux::run()
+}
 
-use cxx_qt::casting::Upcast;
-use cxx_qt_lib::{QGuiApplication, QQmlApplicationEngine, QQmlEngine, QUrl};
-use std::pin::Pin;
-fn main() {
-    #[cfg(target_os = "linux")]
-    unsafe {
-        std::env::set_var("QT_QPA_PLATFORMTHEME", "xdgdesktopportal");
-    }
+#[cfg(target_os = "windows")]
+fn main() -> std::process::ExitCode {
+    eprintln!(
+        "Build the WinUI 3 frontend in packobf_gui/platforms/windows. See packobf_gui/README.md."
+    );
+    std::process::ExitCode::FAILURE
+}
 
-    let mut app = QGuiApplication::new();
-    let mut engine = QQmlApplicationEngine::new();
+#[cfg(target_os = "macos")]
+fn main() -> std::process::ExitCode {
+    eprintln!(
+        "Build the SwiftUI frontend with bash packobf_gui/platforms/macos/build.sh. See packobf_gui/README.md."
+    );
+    std::process::ExitCode::FAILURE
+}
 
-    if let Some(engine) = engine.as_mut() {
-        engine.load(&QUrl::from("qrc:/qt/qml/dev/lost/packobf/qml/main.qml"));
-    }
-
-    if let Some(engine) = engine.as_mut() {
-        let engine: Pin<&mut QQmlEngine> = engine.upcast_pin();
-        engine
-            .on_quit(|_| {
-                println!("QML Quit!");
-            })
-            .release();
-    }
-
-    if let Some(app) = app.as_mut() {
-        app.exec();
-    }
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+fn main() -> std::process::ExitCode {
+    eprintln!("PackOBF GUI currently supports Linux, Windows, and macOS.");
+    std::process::ExitCode::FAILURE
 }

@@ -41,6 +41,7 @@ public class PackOBF {
         if (input.length == 0) throw new IllegalArgumentException("Input ZIP is empty");
         if (options == null) throw new IllegalArgumentException("Options are null");
         if (options.compression() == null) throw new IllegalArgumentException("Compression is null");
+        if (options.soundQuality() == null) throw new IllegalArgumentException("Sound quality is null");
         if (options.shaderCompression() == null) throw new IllegalArgumentException("Shader compression is null");
         if (options.numThreads() == null) throw new IllegalArgumentException("Number of threads is null");
         if (options.targetVersion() == null) throw new IllegalArgumentException("Target version is null");
@@ -54,6 +55,7 @@ public class PackOBF {
                 new Native.Options(
                         options.compression().value(),
                         options.shaderCompression().value(),
+                        options.soundQuality().value(),
                         options.renameFiles(),
                         options.blockUnzipping(),
                         options.corruptPngFiles(),

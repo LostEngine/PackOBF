@@ -1,0 +1,5 @@
+/target/
+/platforms/windows/bin/
+/platforms/windows/obj/
+/platforms/windows/.vs/
+/platforms/windows/*.user

@@ -8,9 +8,18 @@ pub struct Identifier {
 
 impl Identifier {
     pub fn new(namespace: impl Into<String>, path: impl Into<String>) -> Self {
-        Self {
-            namespace: namespace.into(),
-            path: path.into(),
+        let namespace = namespace.into();
+        let path = path.into();
+        if namespace == "minecraft" {
+            Self {
+                namespace: String::new(),
+                path,
+            }
+        } else {
+            Self {
+                namespace,
+                path,
+            }
         }
     }
 
