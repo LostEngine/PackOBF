@@ -180,10 +180,10 @@ jobs:
         include:
           - os: ubuntu-24.04
             artifact: linux-x86_64
-          - os: macos-15-intel
+          - os: macos-26-intel
             artifact: macos-x86_64
             mac-arch: x86_64
-          - os: macos-15
+          - os: macos-26
             artifact: macos-aarch64
             mac-arch: arm64
           - os: windows-2025
