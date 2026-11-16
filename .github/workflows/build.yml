@@ -242,7 +242,11 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           dotnet publish packobf_gui/platforms/windows/PackOBF.Windows.csproj \
-            -c Release -p:Platform=x64 -o dist
+            -c Release -p:Platform=x64 -o dist\
+            -p:EnableMsixTooling=true \
+            -p:IncludeAllContentForSelfExtract=true \
+            -p:PublishSingleFile=true \
+            -p:DebugType=embedded
           test -f dist/PackOBF.exe
           test -f dist/packobf_gui.dll
           cp LICENSE.md dist/
