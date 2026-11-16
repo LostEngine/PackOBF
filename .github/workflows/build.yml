@@ -248,7 +248,6 @@ jobs:
             -p:PublishSingleFile=true \
             -p:DebugType=embedded
           test -f dist/PackOBF.exe
-          test -f dist/packobf_gui.dll
           cp LICENSE.md dist/
 
       - name: Upload GUI
